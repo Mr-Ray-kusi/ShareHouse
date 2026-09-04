@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-cream text-ink font-sans antialiased;
+}
+
+.kente-bar {
+  height: 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    #ce1126 0 18px,
+    #fcd116 18px 36px,
+    #006b3f 36px 54px,
+    #111111 54px 64px
+  );
+}
+
+.grain {
+  background-image:
+    radial-gradient(circle at 12% 18%, rgba(212, 160, 23, 0.14), transparent 28%),
+    radial-gradient(circle at 88% 0%, rgba(11, 93, 59, 0.12), transparent 32%);
+}
+
+.card {
+  @apply bg-white/90 border border-forest-100 rounded-2xl shadow-lift;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-primary {
+  @apply btn bg-forest-600 text-white hover:bg-forest-700;
+}
+
+.btn-gold {
+  @apply btn bg-gold-500 text-ink hover:bg-gold-400;
+}
+
+.btn-ghost {
+  @apply btn border border-forest-200 bg-white text-forest-800 hover:bg-forest-50;
+}
+
+.input {
+  @apply w-full rounded-xl border border-forest-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-100;
+}
+
+.label {
+  @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-forest-800/70;
+}
+
+.desk-card {
+  @apply bg-white rounded-[1.4rem] shadow-desk;
+}
+
+.desk-search {
+  @apply w-full rounded-full border-2 border-[#2563eb] bg-white pl-11 pr-4 py-2.5 text-sm outline-none;
+}
