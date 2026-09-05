@@ -56,7 +56,7 @@ export default function Register() {
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-display text-3xl md:text-4xl">Start New</h1>
-          <p className="mt-1 text-sm text-ink/70">Register a hall or SRC. Paystack payment is required, then a system admin must approve your login.</p>
+          <p className="mt-1 text-sm text-ink/70">Register a hall or SRC.</p>
         </div>
         <p className="text-sm">
           Already registered? <Link to="/login" className="font-semibold text-forest-700">Sign in</Link>
