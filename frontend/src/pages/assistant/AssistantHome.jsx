@@ -86,7 +86,7 @@ export default function AssistantHome() {
         <HallHero
           compact
           eyebrow="Field collection"
-          title={tenant?.name || 'WelfareShare'}
+          title={tenant?.name || 'ShareHouse'}
           subtitle={
             distribution
               ? `${distribution.title} · ${visible.length} ${needle ? 'match' : 'pending'}`

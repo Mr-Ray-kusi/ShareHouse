@@ -93,7 +93,7 @@ async function start() {
   }
   await ensureSuperAdmin();
   server.listen(env.port, () => {
-    console.log(`WelfareShare API on port ${env.port}`);
+    console.log(`ShareHouse API on port ${env.port}`);
   });
 }
 

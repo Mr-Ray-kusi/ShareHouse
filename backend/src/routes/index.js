@@ -11,7 +11,7 @@ import telemetryRoutes from './telemetry.js';
 const router = Router();
 
 router.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'welfareshare-api', time: new Date().toISOString() });
+  res.json({ ok: true, service: 'sharehouse-api', time: new Date().toISOString() });
 });
 
 router.use('/auth', authRoutes);

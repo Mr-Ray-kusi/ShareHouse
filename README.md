@@ -1,4 +1,4 @@
-# WelfareShare
+# ShareHouse
 
 Multi-tenant welfare distribution SaaS for Ghanaian tertiary halls and SRCs. Hall presidents upload a student list, send assistants into the field with unique join links, and watch collections live so the same student cannot collect twice.
 

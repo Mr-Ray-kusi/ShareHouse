@@ -9,7 +9,7 @@ function BrandMark() {
         W
       </div>
       <div>
-        <p className="font-display text-lg leading-none">WelfareShare</p>
+        <p className="font-display text-lg leading-none">ShareHouse</p>
         <p className="text-[11px] uppercase tracking-[0.18em] text-forest-700/70">Halls of Ghana</p>
       </div>
     </div>
@@ -39,7 +39,7 @@ export default function AppShell() {
         <header className="shrink-0 flex items-center justify-between px-4 py-2.5 bg-white border-b border-forest-100">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-widest text-forest-700/70">Field collection</p>
-            <p className="font-semibold truncate">{tenant?.name || 'WelfareShare'}</p>
+            <p className="font-semibold truncate">{tenant?.name || 'ShareHouse'}</p>
           </div>
           <button className="btn-ghost text-xs shrink-0" onClick={handleLogout}>
             Sign out

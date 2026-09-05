@@ -9,6 +9,7 @@ export default function TenantDetail() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const [statusBusy, setStatusBusy] = useState(false);
 
   useEffect(() => {
     api
@@ -29,6 +30,19 @@ export default function TenantDetail() {
     }
   }
 
+  async function setActive(isActive) {
+    setStatusBusy(true);
+    setError('');
+    try {
+      const { data: d } = await api.patch(`/api/super/tenants/${tenantId}/status`, { isActive });
+      setData((prev) => ({ ...prev, tenant: d.tenant }));
+    } catch (err) {
+      setError(err.response?.data?.message || 'Update failed.');
+    } finally {
+      setStatusBusy(false);
+    }
+  }
+
   if (error && !data) return <p className="text-rose-600">{error}</p>;
   if (!data) return <p className="text-slate-400">Loading…</p>;
 
@@ -38,10 +52,24 @@ export default function TenantDetail() {
     <div>
       <Link to="/super/halls" className="text-sm text-[#2563eb] font-medium">← Registered Halls</Link>
       <PageIntro kicker={t.schoolName} title={t.name} subtitle={`${t.adminName} · ${t.adminEmail}`} />
+      <div className="mb-4">
+        <button
+          className="rounded-full bg-[#2563eb] text-white text-xs font-semibold px-4 py-1.5 disabled:opacity-50"
+          disabled={statusBusy || (!t.isActive && !t.lastPaymentAt)}
+          onClick={() => setActive(!t.isActive)}
+        >
+          {statusBusy ? 'Saving…' : t.isActive ? 'Deactivate login' : 'Approve login'}
+        </button>
+      </div>
       {error && <p className="text-sm text-rose-600 mb-4">{error}</p>}
       <div className="grid md:grid-cols-3 gap-4">
         <MetricCard icon={Coins} label="Plan" value={`${t.subscriptionPlan} · GHS ${t.subscriptionFee}`} />
-        <MetricCard icon={BadgeCheck} label="Status" value={t.isActive ? 'Active' : 'Inactive'} hint={`Expires ${t.expiryDate ? new Date(t.expiryDate).toLocaleDateString() : '—'}`} />
+        <MetricCard
+          icon={BadgeCheck}
+          label="Status"
+          value={!t.lastPaymentAt ? 'Awaiting payment' : t.isActive ? 'Active' : 'Awaiting approval'}
+          hint={`Expires ${t.expiryDate ? new Date(t.expiryDate).toLocaleDateString() : '—'}`}
+        />
         <MetricCard accent icon={Package} label="Collections" value={data.collectionCount} hint="Logged collections for this hall" />
       </div>
       <Panel title="Uploaded Excel files" className="mt-4">

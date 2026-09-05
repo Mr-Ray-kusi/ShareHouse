@@ -9,12 +9,16 @@ import {
   verifyWebhookSignature,
 } from '../services/paystackService.js';
 
-async function activateTenant(tenant, extra = {}) {
-  tenant.isActive = true;
+async function markPaid(tenant, extra = {}) {
+  const alreadyPaid = Boolean(tenant.lastPaymentAt);
+  const alreadyApproved = Boolean(tenant.isActive);
   tenant.expiryDate = addYears(new Date(), 1);
   tenant.lastPaymentAt = new Date();
   if (extra.customerCode) tenant.paystackCustomerCode = extra.customerCode;
   if (extra.reference) tenant.paystackReference = extra.reference;
+  if (alreadyPaid || alreadyApproved) {
+    tenant.isActive = true;
+  }
   await tenant.save();
   return tenant;
 }
@@ -57,7 +61,7 @@ export const verify = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: 'No hall matched this payment.' });
   }
 
-  await activateTenant(tenant, {
+  await markPaid(tenant, {
     customerCode: data.customer?.customer_code,
     reference: data.reference,
   });
@@ -65,8 +69,11 @@ export const verify = asyncHandler(async (req, res) => {
   track({ pillar: 'health', name: 'paystack_success', tenantId: tenant.tenantId });
 
   return res.json({
-    message: 'Subscription activated for one year.',
+    message: tenant.isActive
+      ? 'Subscription renewed for one year.'
+      : 'Payment received. A system admin must approve this hall before you can sign in.',
     tenant,
+    pendingApproval: !tenant.isActive,
   });
 });
 
@@ -86,14 +93,15 @@ export const webhook = asyncHandler(async (req, res) => {
       : await Tenant.findOne({ paystackReference: data.reference });
 
     if (tenant && data.status === 'success') {
-      await activateTenant(tenant, {
+      await markPaid(tenant, {
         customerCode: data.customer?.customer_code,
         reference: data.reference,
       });
       const io = req.app.get('io');
-      io?.to(`tenant:${tenant.tenantId}`).emit('tenant:activated', {
+      io?.to(`tenant:${tenant.tenantId}`).emit('tenant:paid', {
         tenantId: tenant.tenantId,
         expiryDate: tenant.expiryDate,
+        pendingApproval: !tenant.isActive,
       });
     }
   }

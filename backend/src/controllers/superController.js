@@ -140,13 +140,32 @@ export const setTenantActive = asyncHandler(async (req, res) => {
   const tenant = await Tenant.findOne({ tenantId: req.params.tenantId });
   if (!tenant) return res.status(404).json({ message: 'Tenant not found.' });
 
-  tenant.isActive = Boolean(isActive);
+  const wantActive = Boolean(isActive);
+  if (wantActive && !tenant.lastPaymentAt) {
+    return res.status(400).json({
+      message: 'This hall has not completed Paystack payment yet. Approval is only available after payment.',
+    });
+  }
+
+  tenant.isActive = wantActive;
   if (tenant.isActive && (!tenant.expiryDate || tenant.expiryDate < new Date())) {
     tenant.expiryDate = addYears(new Date(), 1);
-    tenant.lastPaymentAt = new Date();
   }
   await tenant.save();
-  res.json({ tenant, message: tenant.isActive ? 'Tenant activated.' : 'Tenant deactivated.' });
+
+  const admins = await User.find({ tenantId: tenant.tenantId, role: 'tenant_admin' });
+  for (const admin of admins) {
+    admin.isActive = wantActive;
+    if (!wantActive) admin.refreshTokens = [];
+    await admin.save();
+  }
+
+  res.json({
+    tenant,
+    message: tenant.isActive
+      ? 'Hall approved. The hall admin can now sign in.'
+      : 'Hall deactivated. Hall admin logins are blocked.',
+  });
 });
 
 function pct(part, whole) {

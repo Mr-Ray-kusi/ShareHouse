@@ -12,7 +12,7 @@ export default function SuperHealth() {
       <PageIntro
         kicker="Pillar 1"
         title="Health & performance"
-        subtitle="Is WelfareShare actually working? Watch API success, exceptions, Paystack, and load speed before you look at revenue."
+        subtitle="Is ShareHouse actually working? Watch API success, exceptions, Paystack, and load speed before you look at revenue."
       />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard icon={Activity} label="API success rate" value={health.successRate != null ? `${health.successRate}%` : '—'} delta={health.successDelta} hint="Since last week · 24h window" />

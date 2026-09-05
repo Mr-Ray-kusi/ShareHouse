@@ -73,7 +73,7 @@ export default function DistributionDetail() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'welfareshare-beneficiaries.csv';
+    a.download = 'sharehouse-beneficiaries.csv';
     a.click();
     URL.revokeObjectURL(url);
   }

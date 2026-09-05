@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AuthScreen from '../components/AuthScreen';
 
@@ -15,7 +15,6 @@ const empty = {
 
 export default function Register() {
   const { register } = useAuth();
-  const navigate = useNavigate();
   const [form, setForm] = useState(empty);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -31,8 +30,12 @@ export default function Register() {
     try {
       const data = await register(form);
       const url = data.payment?.authorization_url;
-      if (url) window.location.href = url;
-      else navigate('/paywall');
+      if (!url) {
+        setError(data.paymentError || 'Paystack did not return a checkout URL. Check the API keys.');
+        setBusy(false);
+        return;
+      }
+      window.location.href = url;
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed.');
       setBusy(false);
@@ -44,7 +47,7 @@ export default function Register() {
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-display text-3xl md:text-4xl">Start New</h1>
-          <p className="mt-1 text-sm text-ink/70">Register a hall or SRC. Payment via Paystack activates the year.</p>
+          <p className="mt-1 text-sm text-ink/70">Register a hall or SRC. Paystack payment is required, then a system admin must approve your login.</p>
         </div>
         <p className="text-sm">
           Already registered? <Link to="/login" className="font-semibold text-forest-700">Sign in</Link>

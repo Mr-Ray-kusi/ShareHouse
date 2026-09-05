@@ -14,8 +14,8 @@ export default function AuthScreen({ children }) {
       <div className="relative z-10 flex min-h-screen flex-col px-4 py-6 sm:px-8">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between">
           <Link to="/" className="flex items-center gap-2 text-white">
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-gold-400 font-display text-lg text-ink">W</div>
-            <span className="font-bold">WelfareShare</span>
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-gold-400 font-display text-lg text-ink">S</div>
+            <span className="font-bold">ShareHouse</span>
           </Link>
           <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-semibold text-white hover:text-gold-400">
             <ArrowLeft size={16} /> Back to home

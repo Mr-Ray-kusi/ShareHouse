@@ -62,6 +62,25 @@ export const register = asyncHandler(async (req, res) => {
 
   const existingUser = await User.findOne({ email: String(adminEmail).toLowerCase() });
   if (existingUser) {
+    if (existingUser.role === 'tenant_admin' && existingUser.tenantId && (await existingUser.comparePassword(password))) {
+      const existingTenant = await Tenant.findOne({ tenantId: existingUser.tenantId });
+      if (existingTenant && !existingTenant.lastPaymentAt) {
+        const callbackUrl = `${env.frontendUrl}/payment/callback?tenant=${existingTenant.tenantId}`;
+        const payment = await initializePayment({
+          email: existingTenant.adminEmail,
+          tenantId: existingTenant.tenantId,
+          planKey: existingTenant.subscriptionPlan,
+          callbackUrl,
+        });
+        existingTenant.paystackReference = payment.reference;
+        await existingTenant.save();
+        return res.status(200).json({
+          message: 'Complete Paystack payment to finish registration.',
+          tenant: existingTenant,
+          payment,
+        });
+      }
+    }
     return res.status(409).json({ message: 'An account with this email already exists.' });
   }
 
@@ -93,7 +112,7 @@ export const register = asyncHandler(async (req, res) => {
     phone: tenant.adminPhone,
     passwordHash,
     role: 'tenant_admin',
-    isActive: true,
+    isActive: false,
   });
 
   const callbackUrl = `${env.frontendUrl}/payment/callback?tenant=${tenantId}`;
@@ -108,21 +127,16 @@ export const register = asyncHandler(async (req, res) => {
     tenant.paystackReference = payment.reference;
     await tenant.save();
   } catch (err) {
-    const session = await issueSession(res, user);
-    track({ pillar: 'funnel', name: 'register', tenantId, value: plan.fee });
-    return res.status(201).json({
-      message: 'Hall registered. Payment could not be started automatically — complete it from Settings.',
-      ...session,
-      tenant,
-      paymentError: err.message,
-    });
+    await User.deleteMany({ _id: user.id });
+    await Tenant.deleteMany({ tenantId });
+    err.status = err.status || 503;
+    err.message = err.message || 'Paystack payment could not be started. Account was not created.';
+    throw err;
   }
 
-  const session = await issueSession(res, user);
   track({ pillar: 'funnel', name: 'register', tenantId, value: plan.fee });
   return res.status(201).json({
-    message: 'Hall registered. Complete payment to activate your year.',
-    ...session,
+    message: 'Complete Paystack payment to finish registration. A system admin will then approve your login.',
     tenant,
     payment,
   });
@@ -139,13 +153,33 @@ export const login = asyncHandler(async (req, res) => {
     track({ pillar: 'audience', name: 'login_fail' });
     return res.status(401).json({ message: 'Invalid email or password.' });
   }
-  if (!user.isActive) {
-    return res.status(403).json({ message: 'This account has been deactivated.' });
-  }
 
   let tenant = null;
   if (user.tenantId) {
     tenant = await Tenant.findOne({ tenantId: user.tenantId });
+  }
+
+  if (user.role === 'tenant_admin') {
+    if (!tenant) {
+      return res.status(404).json({ message: 'Hall not found for this account.' });
+    }
+    if (!tenant.lastPaymentAt) {
+      return res.status(402).json({
+        message: 'Complete Paystack payment before this hall can be reviewed.',
+        code: 'PAYMENT_REQUIRED',
+        tenantId: tenant.tenantId,
+      });
+    }
+    if (!tenant.isActive || !user.isActive) {
+      return res.status(403).json({
+        message: 'Payment received. A system admin must approve this hall before you can sign in.',
+        code: 'PENDING_APPROVAL',
+      });
+    }
+  }
+
+  if (!user.isActive) {
+    return res.status(403).json({ message: 'This account has been deactivated.' });
   }
 
   const session = await issueSession(res, user);

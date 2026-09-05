@@ -69,7 +69,7 @@ export default function JoinAssistant() {
           <button className="btn-gold w-full" disabled={busy}>{busy ? 'Opening…' : 'Enter collection'}</button>
         </form>
         <p className="text-xs text-cream/40 mt-6">Use the assistant name the president saved, with your own password. A name and password from two different people will not work.</p>
-        <Link to="/" className="text-cream/50 text-sm mt-4 inline-block">Back to WelfareShare</Link>
+        <Link to="/" className="text-cream/50 text-sm mt-4 inline-block">Back to ShareHouse</Link>
       </div>
     </div>
   );

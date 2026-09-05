@@ -1,4 +1,4 @@
--- WelfareShare schema for Supabase Postgres.
+-- ShareHouse schema for Supabase Postgres.
 -- Run once in the Supabase SQL Editor (Dashboard → SQL → New query).
 
 create extension if not exists pgcrypto;

@@ -40,7 +40,7 @@ export const env = {
   paystackPublic: process.env.PAYSTACK_PUBLIC_KEY || '',
   superAdminEmail: String(process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase(),
   superAdminPassword: process.env.SUPER_ADMIN_PASSWORD || '',
-  superAdminName: process.env.SUPER_ADMIN_NAME || 'WelfareShare Super Admin',
+  superAdminName: process.env.SUPER_ADMIN_NAME || 'ShareHouse Super Admin',
   cookieSecure: process.env.COOKIE_SECURE === 'true',
 };
 

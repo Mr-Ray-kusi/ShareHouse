@@ -64,7 +64,7 @@ export default function SuperShell() {
         <div className="flex items-center gap-3 px-2 mb-8">
           <div className="h-10 w-10 rounded-2xl bg-[#2563eb] grid place-items-center font-semibold">W</div>
           <div>
-            <p className="font-semibold leading-none">WelfareShare</p>
+            <p className="font-semibold leading-none">ShareHouse</p>
             <p className="text-[11px] text-white/45 mt-1 tracking-[0.16em] uppercase">Operator</p>
           </div>
         </div>

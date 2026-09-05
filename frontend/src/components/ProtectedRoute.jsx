@@ -8,7 +8,7 @@ export default function ProtectedRoute({ children, roles }) {
   if (loading) {
     return (
       <div className="min-h-screen grid place-items-center text-forest-700">
-        Loading WelfareShare…
+        Loading ShareHouse…
       </div>
     );
   }

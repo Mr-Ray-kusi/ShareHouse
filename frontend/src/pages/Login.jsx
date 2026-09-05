@@ -36,7 +36,7 @@ export default function Login() {
   if (loading) {
     return (
       <AuthScreen>
-        <p className="text-ink/70">Loading WelfareShare…</p>
+        <p className="text-ink/70">Loading ShareHouse…</p>
       </AuthScreen>
     );
   }
@@ -49,7 +49,7 @@ export default function Login() {
   return (
     <AuthScreen>
       <h1 className="font-display text-3xl md:text-4xl">Sign in to your desk</h1>
-      <p className="mt-1 text-sm text-ink/70">Hall presidents, SRC officers, and the WelfareShare operator.</p>
+      <p className="mt-1 text-sm text-ink/70">Hall presidents, SRC officers, and the ShareHouse operator.</p>
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
         {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <div className="grid gap-4 sm:grid-cols-2">

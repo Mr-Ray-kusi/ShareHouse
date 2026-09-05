@@ -1,5 +1,5 @@
 {
-  "name": "welfareshare-api",
+  "name": "sharehouse-api",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "node --watch src/server.js",
-    "build": "node -e \"console.log('WelfareShare API: no compile step')\"",
+    "build": "node -e \"console.log('ShareHouse API: no compile step')\"",
     "start": "node src/server.js",
     "seed": "node src/scripts/seedSuperAdmin.js"
   },

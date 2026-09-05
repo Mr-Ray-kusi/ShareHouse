@@ -44,7 +44,7 @@ export function AuthProvider({ children }) {
 
   async function register(payload) {
     const { data } = await api.post('/api/auth/register', payload);
-    applySession(data);
+    if (data?.accessToken) applySession(data);
     return data;
   }
 

@@ -37,7 +37,7 @@ export default function SuperHalls() {
       <PageIntro
         kicker="Halls"
         title="Registered Halls"
-        subtitle="Activate or deactivate a hall. Super admin does not enter live desks, distributions, or assistant tables."
+        subtitle="Approve a hall after Paystack payment to turn on its login. Super admin does not enter live desks, distributions, or assistant tables."
       />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div className="desk-card p-4">
@@ -73,6 +73,12 @@ export default function SuperHalls() {
             <tbody>
               {rows.map((t) => {
                 const expired = t.expiryDate && new Date(t.expiryDate) < new Date();
+                const paid = Boolean(t.lastPaymentAt);
+                const status = !paid
+                  ? 'Awaiting payment'
+                  : t.isActive
+                    ? (expired ? 'Expired' : 'Active')
+                    : 'Awaiting approval';
                 return (
                   <tr key={t.tenantId} className="border-b border-slate-50">
                     <td className="py-3 pr-3">
@@ -80,16 +86,17 @@ export default function SuperHalls() {
                       <p className="text-xs text-slate-400">{t.schoolName} · {t.tenantId}</p>
                     </td>
                     <td className="py-3 pr-3 capitalize">{t.subscriptionPlan}</td>
-                    <td className="py-3 pr-3">{t.isActive ? (expired ? 'Expired' : 'Active') : 'Inactive'}</td>
+                    <td className="py-3 pr-3">{status}</td>
                     <td className="py-3 pr-3">{fmtDate(t.expiryDate)}</td>
                     <td className="py-3 pr-3">{t.subscriptionFee}</td>
                     <td className="py-3 text-right">
                       <button
-                        className="rounded-full px-3 py-1.5 text-xs font-semibold border border-slate-200 hover:bg-slate-50"
-                        disabled={busy === t.tenantId}
+                        className="rounded-full px-3 py-1.5 text-xs font-semibold border border-slate-200 hover:bg-slate-50 disabled:opacity-50"
+                        disabled={busy === t.tenantId || (!t.isActive && !paid)}
+                        title={!paid ? 'Hall must pay with Paystack before approval' : ''}
                         onClick={() => toggle(t, !t.isActive)}
                       >
-                        {t.isActive ? 'Deactivate' : 'Activate'}
+                        {t.isActive ? 'Deactivate' : 'Approve login'}
                       </button>
                     </td>
                   </tr>

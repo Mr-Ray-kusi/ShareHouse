@@ -42,8 +42,8 @@ export default function Landing() {
       <header className="sticky top-0 z-50 border-b border-black/5 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4">
           <Link to="/" className="flex items-center gap-2">
-            <div className="grid h-10 w-10 place-items-center rounded-lg bg-gold-400 font-display text-lg text-ink">W</div>
-            <span className="text-xl font-bold tracking-tight">WelfareShare</span>
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-gold-400 font-display text-lg text-ink">S</div>
+            <span className="text-xl font-bold tracking-tight">ShareHouse</span>
           </Link>
           <div className="flex gap-2">
             <Link to="/login" className="btn-ghost">Sign in</Link>
@@ -64,7 +64,7 @@ export default function Landing() {
             <div className="max-w-xl text-white">
               <p className="text-xs font-bold uppercase tracking-[0.28em] text-gold-400">We are here to help your hall</p>
               <h1 className="mt-3 text-4xl font-black uppercase leading-[1.05] md:text-6xl">
-                Welcome to<br />WelfareShare
+                Welcome to<br />ShareHouse
               </h1>
               <p className="mt-5 max-w-lg text-sm leading-relaxed text-white/85 md:text-base">
                 Manage and control all your souvenirs, welfare items and many more on one single
@@ -148,7 +148,7 @@ export default function Landing() {
       </section>
 
       <footer className="bg-ink py-8 text-center text-sm text-white/50">
-        <p>WelfareShare · Welfare desk for tertiary Ghana · © {new Date().getFullYear()}</p>
+        <p>ShareHouse · Welfare desk for tertiary Ghana · © {new Date().getFullYear()}</p>
         <p className="mt-2 text-white/70">Powered by Techrise Academy</p>
       </footer>
     </div>

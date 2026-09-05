@@ -64,7 +64,7 @@ export async function requireActiveTenant(req, res, next) {
       return res.status(402).json({
         message: tenant.isActive
           ? 'This hall subscription has expired. Renew to continue.'
-          : 'This hall is not yet activated. Complete payment to unlock WelfareShare.',
+          : 'This hall is not yet activated. Complete payment and wait for system admin approval.',
         code: tenant.isActive ? 'SUBSCRIPTION_EXPIRED' : 'SUBSCRIPTION_INACTIVE',
       });
     }
