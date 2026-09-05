@@ -1,28 +1,25 @@
-import mongoose from 'mongoose';
+import { createModel } from '../db/model.js';
 
-const beneficiarySchema = new mongoose.Schema(
-  {
-    tenantId: { type: String, required: true, index: true },
-    distributionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Distribution',
-      required: true,
-      index: true,
-    },
-    studentIndex: { type: String, required: true, trim: true, uppercase: true },
-    fullName: { type: String, required: true, trim: true },
-    level: { type: String, default: '', trim: true },
-    phone: { type: String, default: '', trim: true },
-    sheetRow: { type: mongoose.Schema.Types.Mixed, default: {} },
-    searchText: { type: String, default: '', index: true },
+export const Beneficiary = createModel({
+  table: 'beneficiaries',
+  fields: [
+    'id',
+    'tenantId',
+    'distributionId',
+    'studentIndex',
+    'fullName',
+    'level',
+    'phone',
+    'sheetRow',
+    'searchText',
+    'createdAt',
+    'updatedAt',
+  ],
+  uuidFields: ['distributionId'],
+  dateFields: ['createdAt', 'updatedAt'],
+  jsonFields: ['sheetRow'],
+  prepare(doc) {
+    if (doc.studentIndex) doc.studentIndex = String(doc.studentIndex).trim().toUpperCase();
+    if (!doc.sheetRow) doc.sheetRow = {};
   },
-  { timestamps: true }
-);
-
-beneficiarySchema.index(
-  { tenantId: 1, distributionId: 1, studentIndex: 1 },
-  { unique: true }
-);
-beneficiarySchema.index({ tenantId: 1, distributionId: 1, searchText: 1 });
-
-export const Beneficiary = mongoose.model('Beneficiary', beneficiarySchema);
+});

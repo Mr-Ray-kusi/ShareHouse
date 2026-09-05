@@ -5,7 +5,7 @@ Multi-tenant welfare distribution SaaS for Ghanaian tertiary halls and SRCs. Hal
 ## Stack
 
 - **Frontend:** React 18, Vite, Tailwind CSS, React Router v6
-- **Backend:** Node.js, Express, MongoDB / Mongoose
+- **Backend:** Node.js, Express, Supabase (Postgres)
 - **Auth:** JWT access tokens + httpOnly refresh cookies
 - **Payments:** Paystack initialize + `charge.success` webhook
 - **Uploads:** Multer + SheetJS (`xlsx`)
@@ -36,15 +36,16 @@ Super admins **cannot** create distributions or mark beneficiaries, including in
 
 ## Local setup
 
-1. Install [MongoDB](https://www.mongodb.com/docs/manual/installation/) locally or use Atlas.
-2. Copy env files:
+1. Create a free project at [supabase.com](https://supabase.com).
+2. In the dashboard SQL Editor, run `backend/supabase/schema.sql`.
+3. Copy env files and fill in the project URL plus the **service role** key (Settings → API). Never put that key in the frontend.
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-3. Put your Paystack test keys in `backend/.env`. Leave them as placeholders only if you will activate halls from the super-admin desk.
-4. Install and run (two terminals):
+4. Put your Paystack test keys in `backend/.env`. Leave them as placeholders only if you will activate halls from the super-admin desk.
+5. Install and run (two terminals):
 
 ```bash
 cd backend
@@ -80,8 +81,9 @@ Events used: `charge.success`. The signature header `x-paystack-signature` is ve
 
 ## Deploy
 
+- **Database:** Supabase — run `backend/supabase/schema.sql`, then set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on the API host
 - **API:** Render or Railway — set env vars from `backend/.env.example`, start command `npm start`, health `/api/health`
 - **Web:** Vercel or Netlify — build `npm run build`, output `dist`, set `VITE_API_URL` to the public API origin
 - Frontend `vercel.json` rewrites all routes to `index.html`
 
-Set `FRONTEND_URL` on the API to the deployed web origin, `COOKIE_SECURE=true`, and strong JWT secrets.
+Set `FRONTEND_URL` on the API to the deployed web origin, `COOKIE_SECURE=true`, and strong JWT secrets. The frontend still talks only to your API, not directly to Supabase.

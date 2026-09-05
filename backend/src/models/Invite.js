@@ -1,26 +1,26 @@
-import mongoose from 'mongoose';
+import { createModel } from '../db/model.js';
 
-const inviteSchema = new mongoose.Schema(
-  {
-    tenantId: { type: String, required: true, index: true },
-    code: { type: String, required: true, uppercase: true, trim: true, index: true },
-    label: { type: String, default: '', trim: true },
-    passwordHash: { type: String, required: true },
-    passwordPlain: { type: String, default: '' },
-    distributionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Distribution',
-      default: null,
-    },
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    assistantId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-    assistantName: { type: String, default: '' },
-    isActive: { type: Boolean, default: true },
-    lastUsedAt: { type: Date },
+export const Invite = createModel({
+  table: 'invites',
+  fields: [
+    'id',
+    'tenantId',
+    'code',
+    'label',
+    'passwordHash',
+    'passwordPlain',
+    'distributionId',
+    'createdBy',
+    'assistantId',
+    'assistantName',
+    'isActive',
+    'lastUsedAt',
+    'createdAt',
+    'updatedAt',
+  ],
+  uuidFields: ['distributionId', 'createdBy', 'assistantId'],
+  dateFields: ['lastUsedAt', 'createdAt', 'updatedAt'],
+  prepare(doc) {
+    if (doc.code) doc.code = String(doc.code).toUpperCase().trim();
   },
-  { timestamps: true }
-);
-
-inviteSchema.index({ tenantId: 1, isActive: 1 });
-
-export const Invite = mongoose.model('Invite', inviteSchema);
+});

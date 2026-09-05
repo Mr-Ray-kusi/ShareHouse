@@ -37,11 +37,9 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
 
   const limit = q ? 80 : 5000;
   const items = await Beneficiary.find(filter).sort({ fullName: 1, studentIndex: 1 }).limit(limit);
-  const ids = items.map((b) => b._id);
   const marks = await Collection.find({
     tenantId: req.tenantId,
     distributionId: dist._id,
-    beneficiaryId: { $in: ids },
   });
   const markMap = new Map(marks.map((m) => [String(m.beneficiaryId), m]));
   const headers = dist.sheetHeaders?.length

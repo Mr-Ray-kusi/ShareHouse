@@ -1,31 +1,39 @@
-import mongoose from 'mongoose';
+import { createModel } from '../db/model.js';
 
-const tenantSchema = new mongoose.Schema(
-  {
-    tenantId: { type: String, unique: true, required: true },
-    name: { type: String, required: true, trim: true },
-    schoolName: { type: String, required: true, trim: true },
-    adminName: { type: String, required: true, trim: true },
-    adminEmail: { type: String, required: true, lowercase: true, trim: true },
-    adminPhone: { type: String, required: true, trim: true },
-    subscriptionPlan: { type: String, enum: ['hall', 'src'], required: true },
-    subscriptionFee: { type: Number, required: true },
-    isActive: { type: Boolean, default: false },
-    expiryDate: { type: Date, required: true },
-    paystackCustomerCode: { type: String, default: '' },
-    paystackReference: { type: String, default: '' },
-    lastPaymentAt: { type: Date },
-    joinCode: { type: String, unique: true, sparse: true, uppercase: true, trim: true },
+export const Tenant = createModel({
+  table: 'tenants',
+  fields: [
+    'id',
+    'tenantId',
+    'name',
+    'schoolName',
+    'adminName',
+    'adminEmail',
+    'adminPhone',
+    'subscriptionPlan',
+    'subscriptionFee',
+    'isActive',
+    'expiryDate',
+    'paystackCustomerCode',
+    'paystackReference',
+    'lastPaymentAt',
+    'joinCode',
+    'createdAt',
+    'updatedAt',
+  ],
+  dateFields: ['expiryDate', 'lastPaymentAt', 'createdAt', 'updatedAt'],
+  prepare(doc) {
+    if (doc.adminEmail) doc.adminEmail = String(doc.adminEmail).toLowerCase().trim();
+    if (doc.joinCode) doc.joinCode = String(doc.joinCode).toUpperCase().trim();
   },
-  { timestamps: { createdAt: true, updatedAt: true } }
-);
-
-tenantSchema.virtual('isExpired').get(function isExpired() {
-  return this.expiryDate ? this.expiryDate.getTime() < Date.now() : true;
+  virtuals: {
+    isExpired() {
+      return this.expiryDate ? new Date(this.expiryDate).getTime() < Date.now() : true;
+    },
+  },
+  methods: {
+    hasAccess() {
+      return Boolean(this.isActive && this.expiryDate && new Date(this.expiryDate).getTime() > Date.now());
+    },
+  },
 });
-
-tenantSchema.methods.hasAccess = function hasAccess() {
-  return this.isActive && this.expiryDate && this.expiryDate.getTime() > Date.now();
-};
-
-export const Tenant = mongoose.model('Tenant', tenantSchema);
