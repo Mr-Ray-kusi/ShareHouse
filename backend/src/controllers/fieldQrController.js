@@ -1,10 +1,12 @@
 import bcrypt from 'bcryptjs';
 import { Invite, Tenant, Distribution, Beneficiary, Collection } from '../models/index.js';
-import { generateFieldQrToken, generateInvitePassword, isFieldQrCode } from '../utils/codes.js';
+import { generateFieldQrToken, isFieldQrCode } from '../utils/codes.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { env } from '../config/env.js';
 import { foldSearch, searchRegex } from '../utils/search.js';
 import { track } from '../services/telemetry.js';
+
+const UNUSED_QR_HASH = bcrypt.hashSync('field-qr-unused', 4);
 
 function fieldPayload(row) {
   const path = `/field/${row.code}`;
@@ -52,9 +54,11 @@ function headersOf(dist) {
 }
 
 export const listFieldQrs = asyncHandler(async (req, res) => {
-  const items = await Invite.find({ tenantId: req.tenantId }).sort({ createdAt: -1 });
+  const [items, distributions] = await Promise.all([
+    Invite.find({ tenantId: req.tenantId }).sort({ createdAt: -1 }),
+    Distribution.find({ tenantId: req.tenantId }).sort({ createdAt: -1 }),
+  ]);
   const qrs = items.filter((row) => isFieldQrCode(row.code)).map(fieldPayload);
-  const distributions = await Distribution.find({ tenantId: req.tenantId }).sort({ createdAt: -1 });
   res.json({
     qrs,
     distributions: distributions.map((d) => ({
@@ -67,9 +71,7 @@ export const listFieldQrs = asyncHandler(async (req, res) => {
 });
 
 export const createFieldQrs = asyncHandler(async (req, res) => {
-  let count = Number(req.body?.count) || 5;
-  if (count < 1) count = 5;
-  if (count > 10) count = 10;
+  const count = 1;
 
   let dist = null;
   if (req.body?.distributionId) {
@@ -93,12 +95,11 @@ export const createFieldQrs = asyncHandler(async (req, res) => {
   const created = [];
   for (let i = 0; i < count; i += 1) {
     const token = generateFieldQrToken();
-    const secret = generateInvitePassword() + generateInvitePassword();
     const row = await Invite.create({
       tenantId: req.tenantId,
       code: token,
       label: `Station ${existing.length + i + 1}`,
-      passwordHash: await bcrypt.hash(secret, 8),
+      passwordHash: UNUSED_QR_HASH,
       passwordPlain: '',
       distributionId: dist._id,
       createdBy: req.user._id,
@@ -113,14 +114,13 @@ export const createFieldQrs = asyncHandler(async (req, res) => {
   });
 });
 
-export const revokeFieldQr = asyncHandler(async (req, res) => {
+export const deleteFieldQr = asyncHandler(async (req, res) => {
   const qr = await Invite.findOne({ _id: req.params.id, tenantId: req.tenantId });
   if (!qr || !isFieldQrCode(qr.code)) {
     return res.status(404).json({ message: 'QR code not found.' });
   }
-  qr.isActive = false;
-  await qr.save();
-  res.json({ message: 'QR code revoked.', qr: fieldPayload(qr) });
+  await Invite.deleteMany({ _id: qr._id, tenantId: req.tenantId });
+  res.json({ message: 'QR code deleted.' });
 });
 
 export const getFieldPublic = asyncHandler(async (req, res) => {
@@ -163,7 +163,13 @@ export const searchFieldPublic = asyncHandler(async (req, res) => {
     ],
   }).sort({ fullName: 1, studentIndex: 1 }).limit(40);
 
-  const marks = await Collection.find({ tenantId: qr.tenantId, distributionId: dist._id });
+  const marks = items.length
+    ? await Collection.find({
+      tenantId: qr.tenantId,
+      distributionId: dist._id,
+      beneficiaryId: { $in: items.map((b) => b._id) },
+    })
+    : [];
   const markMap = new Map(marks.map((m) => [String(m.beneficiaryId), m]));
   const needle = foldSearch(q);
 

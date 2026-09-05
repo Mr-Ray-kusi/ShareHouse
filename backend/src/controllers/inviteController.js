@@ -27,6 +27,7 @@ async function passwordInUse(tenantId, password, exceptId) {
     ...(exceptId ? { _id: { $ne: exceptId } } : {}),
   });
   for (const row of others) {
+    if (isFieldQrCode(row.code) || !row.passwordHash) continue;
     if (await bcrypt.compare(password, row.passwordHash)) return true;
   }
   return false;
@@ -73,6 +74,10 @@ export const listInvites = asyncHandler(async (req, res) => {
 
 export const createInvite = asyncHandler(async (req, res) => {
   const { label, distributionId, password: requestedPassword } = req.body || {};
+  const name = String(label || '').trim();
+  if (!name) {
+    return res.status(400).json({ message: 'Assistant name is required.' });
+  }
   const joinCode = await ensureJoinCode(req.tenant);
   const password = await uniquePassword(req.tenantId, requestedPassword);
   const passwordHash = await bcrypt.hash(password, 12);
@@ -80,7 +85,7 @@ export const createInvite = asyncHandler(async (req, res) => {
   const invite = await Invite.create({
     tenantId: req.tenantId,
     code: joinCode,
-    label: label?.trim() || '',
+    label: name,
     passwordHash,
     passwordPlain: password,
     distributionId: distributionId || null,
@@ -193,6 +198,37 @@ export const revokeInvite = asyncHandler(async (req, res) => {
   }
 
   res.json({ message: 'Assistant access revoked.', invite });
+});
+
+export const restoreInvite = asyncHandler(async (req, res) => {
+  const invite = await Invite.findOne({ _id: req.params.id, tenantId: req.tenantId });
+  if (!invite) return res.status(404).json({ message: 'Invite not found.' });
+  if (isFieldQrCode(invite.code)) {
+    return res.status(400).json({ message: 'This is a field QR code, not an assistant.' });
+  }
+
+  invite.isActive = true;
+  await invite.save();
+
+  if (invite.assistantId) {
+    await User.findByIdAndUpdate(invite.assistantId, { isActive: true });
+  }
+
+  res.json({ message: 'Assistant access restored.', invite });
+});
+
+export const deleteInvite = asyncHandler(async (req, res) => {
+  const invite = await Invite.findOne({ _id: req.params.id, tenantId: req.tenantId });
+  if (!invite) return res.status(404).json({ message: 'Invite not found.' });
+  if (isFieldQrCode(invite.code)) {
+    return res.status(400).json({ message: 'This is a field QR code, not an assistant.' });
+  }
+
+  if (invite.assistantId) {
+    await User.findByIdAndUpdate(invite.assistantId, { isActive: false });
+  }
+  await Invite.deleteMany({ _id: invite._id, tenantId: req.tenantId });
+  res.json({ message: 'Assistant deleted.' });
 });
 
 export const getInvitePublic = asyncHandler(async (req, res) => {

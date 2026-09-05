@@ -9,5 +9,7 @@ router.get('/:id/collections', requireRoles('tenant_admin', 'super_admin'), invi
 router.post('/', requireRoles('tenant_admin'), invites.createInvite);
 router.post('/:id/password', requireRoles('tenant_admin'), invites.setInvitePassword);
 router.post('/:id/revoke', requireRoles('tenant_admin'), invites.revokeInvite);
+router.post('/:id/restore', requireRoles('tenant_admin'), invites.restoreInvite);
+router.post('/:id/delete', requireRoles('tenant_admin'), invites.deleteInvite);
 
 export default router;

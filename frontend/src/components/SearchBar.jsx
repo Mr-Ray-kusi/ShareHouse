@@ -27,7 +27,7 @@ export default function SearchBar({
         e.preventDefault();
         onSearch?.(value);
       }}
-      className="flex flex-col sm:flex-row gap-2 items-stretch"
+      className="flex flex-row gap-2 items-stretch"
     >
       <label className="input flex items-center gap-2 sm:gap-3 flex-1 min-w-0 !px-3">
         <Search className="shrink-0 text-forest-700" size={18} />

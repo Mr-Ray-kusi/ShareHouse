@@ -45,6 +45,7 @@ export default function TenantDashboard() {
   const [view, setView] = useState(null);
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState('asc');
+  const [listReady, setListReady] = useState(false);
 
   async function loadDesk() {
     const { data: d } = await api.get('/api/dashboard');
@@ -56,12 +57,18 @@ export default function TenantDashboard() {
     const { data: d } = await api.get('/api/collections/search');
     setList(d.results || []);
     setHeaders(d.headers || []);
+    setListReady(true);
   }
 
   useEffect(() => {
     loadDesk().catch((err) => setError(err.response?.data?.message || 'Could not load desk.'));
-    loadList().catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!view || listReady) return undefined;
+    loadList().catch(() => {});
+    return undefined;
+  }, [view, listReady]);
 
   useEffect(() => {
     const token = getAccessToken();

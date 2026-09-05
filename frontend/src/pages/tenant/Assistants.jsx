@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Copy, Check, Download, Printer } from 'lucide-react';
+import { Copy, Check, Download, Printer, Trash2 } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import SheetTable from '../../components/SheetTable';
@@ -71,7 +71,12 @@ export default function Assistants() {
     setBusy(true);
     setError('');
     try {
-      await api.post('/api/invites', { label, password: password.trim() || undefined });
+      if (!label.trim()) {
+        setError('Assistant name is required.');
+        setBusy(false);
+        return;
+      }
+      await api.post('/api/invites', { label: label.trim(), password: password.trim() || undefined });
       setLabel('');
       setPassword('');
       await load();
@@ -102,6 +107,17 @@ export default function Assistants() {
   async function revoke(id) {
     if (!window.confirm('Revoke this assistant password?')) return;
     await api.post(`/api/invites/${id}/revoke`);
+    await load();
+  }
+
+  async function restore(id) {
+    await api.post(`/api/invites/${id}/restore`);
+    await load();
+  }
+
+  async function remove(id) {
+    if (!window.confirm('Delete this assistant? This cannot be undone.')) return;
+    await api.post(`/api/invites/${id}/delete`);
     if (openId === id) {
       setOpenId('');
       setVerified({ headers: [], results: [] });
@@ -163,7 +179,7 @@ export default function Assistants() {
 
       {!supportMode && (
         <form onSubmit={create} className="card p-5 mt-6 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-          <input className="input" placeholder="Label (e.g. Table 2 — Kojo)" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <input className="input" placeholder="Name (e.g. Table 2 — Kojo)" value={label} onChange={(e) => setLabel(e.target.value)} required />
           <input
             className="input"
             type="text"
@@ -183,10 +199,10 @@ export default function Assistants() {
           const secret = inv.password || inv.passwordPlain || '';
           return (
             <div key={inv._id} className={`card overflow-hidden ${open ? 'ring-2 ring-forest-600' : ''}`}>
-              <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <div className="flex items-center gap-2 p-4 overflow-x-auto">
                 <button
                   type="button"
-                  className="min-w-0 flex-1 text-left hover:opacity-80"
+                  className="min-w-[10rem] flex-1 text-left hover:opacity-80"
                   onClick={() => selectAssistant(inv._id)}
                 >
                   <p className="font-semibold">
@@ -199,29 +215,40 @@ export default function Assistants() {
                     {open ? ' · showing verified list' : ' · tap to view verified students'}
                   </p>
                 </button>
-                {secret ? (
-                  <button
-                    type="button"
-                    className="btn-ghost text-xs shrink-0 font-mono"
-                    title="Copy password"
-                    onClick={() => copyPassword(inv._id, secret)}
-                  >
-                    {copiedId === inv._id ? <Check size={14} /> : <Copy size={14} />}
-                    <span className="select-all">{secret}</span>
-                  </button>
-                ) : null}
-                {inv.isActive && !supportMode && (
-                  <div className="flex gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
+                  {secret ? (
                     <button
                       type="button"
-                      className="btn-ghost text-xs"
-                      onClick={() => { setResetId(inv._id); setResetPassword(''); }}
+                      className="btn-ghost text-xs font-mono"
+                      title="Copy password"
+                      onClick={() => copyPassword(inv._id, secret)}
                     >
-                      Set password
+                      {copiedId === inv._id ? <Check size={14} /> : <Copy size={14} />}
+                      <span className="select-all">{secret}</span>
                     </button>
-                    <button type="button" className="btn-ghost text-red-700" onClick={() => revoke(inv._id)}>Revoke</button>
-                  </div>
-                )}
+                  ) : null}
+                  {!supportMode && (
+                    <>
+                      {inv.isActive && (
+                        <button
+                          type="button"
+                          className="btn-ghost text-xs"
+                          onClick={() => { setResetId(inv._id); setResetPassword(''); }}
+                        >
+                          Set password
+                        </button>
+                      )}
+                      {inv.isActive ? (
+                        <button type="button" className="btn-ghost text-xs text-red-700" onClick={() => revoke(inv._id)}>Revoke</button>
+                      ) : (
+                        <button type="button" className="btn-ghost text-xs" onClick={() => restore(inv._id)}>Restore</button>
+                      )}
+                      <button type="button" className="btn-ghost text-xs text-red-700" onClick={() => remove(inv._id)}>
+                        <Trash2 size={14} /> Delete
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
               {resetId === inv._id && (
                 <form
