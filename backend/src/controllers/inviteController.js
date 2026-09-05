@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { Invite, User, Tenant, Collection, Distribution, Beneficiary } from '../models/index.js';
-import { generateInviteCode, generateInvitePassword } from '../utils/codes.js';
+import { generateInviteCode, generateInvitePassword, isFieldQrCode } from '../utils/codes.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { env } from '../config/env.js';
 
@@ -61,10 +61,12 @@ export const listInvites = asyncHandler(async (req, res) => {
   const joinCode = await ensureJoinCode(req.tenant);
   const invites = await Invite.find({ tenantId: req.tenantId }).select('-passwordHash').sort({ createdAt: -1 });
   res.json({
-    invites: invites.map((row) => {
-      const obj = row.toObject();
-      return { ...obj, password: obj.passwordPlain || '' };
-    }),
+    invites: invites
+      .filter((row) => !isFieldQrCode(row.code))
+      .map((row) => {
+        const obj = row.toObject();
+        return { ...obj, password: obj.passwordPlain || '' };
+      }),
     ...joinPayload(joinCode),
   });
 });
@@ -195,6 +197,9 @@ export const revokeInvite = asyncHandler(async (req, res) => {
 
 export const getInvitePublic = asyncHandler(async (req, res) => {
   const code = String(req.params.code || '').toUpperCase().trim();
+  if (isFieldQrCode(code)) {
+    return res.status(404).json({ message: 'Use the field collection page from the QR code, not the assistant join link.' });
+  }
   let tenant = await Tenant.findOne({ joinCode: code });
   if (!tenant) tenant = await Tenant.findOne({ tenantId: String(req.params.code || '').toLowerCase() });
 

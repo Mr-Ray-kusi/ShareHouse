@@ -3,6 +3,7 @@ import { CheckCircle2, Ban } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import SheetTable from '../../components/SheetTable';
+import ResultCards from '../../components/ResultCards';
 import SearchBar, { ColumnFilters, applyFilters, rowMatchesQuery } from '../../components/SearchBar';
 import { sortSheetRows } from '../../utils/sheetExport';
 import HallHero from '../../components/HallHero';
@@ -106,7 +107,7 @@ export default function AssistantHome() {
         <SearchBar
           value={q}
           onChange={setQ}
-          placeholder="Search name or ID"
+          placeholder="Search name, ID, or program"
         />
         <ColumnFilters headers={headers} rows={list} filters={filters} onChange={setFilters} />
         {needle && (
@@ -117,22 +118,34 @@ export default function AssistantHome() {
           </p>
         )}
       </div>
-      <div className="flex-1 min-h-0 mt-2">
-        <SheetTable
-          headers={headers}
-          rows={visible}
-          showMark
-          onMark={mark}
-          busyId={busyId}
-          fillHeight
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={(key, dir) => {
-            setSortKey(key);
-            setSortDir(dir);
-          }}
-          emptyMessage={needle ? 'No student matched that search.' : 'Everyone pending has been served. Search to look up a collected student.'}
-        />
+      <div className="flex-1 min-h-0 mt-2 overflow-y-auto md:overflow-hidden">
+        <div className="md:hidden pb-4">
+          <ResultCards
+            headers={headers}
+            rows={visible}
+            showMark
+            onMark={mark}
+            busyId={busyId}
+            emptyMessage={needle ? 'No student matched that search.' : 'Everyone pending has been served. Search to look up a collected student.'}
+          />
+        </div>
+        <div className="hidden md:block h-full">
+          <SheetTable
+            headers={headers}
+            rows={visible}
+            showMark
+            onMark={mark}
+            busyId={busyId}
+            fillHeight
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onSort={(key, dir) => {
+              setSortKey(key);
+              setSortDir(dir);
+            }}
+            emptyMessage={needle ? 'No student matched that search.' : 'Everyone pending has been served. Search to look up a collected student.'}
+          />
+        </div>
       </div>
     </div>
   );

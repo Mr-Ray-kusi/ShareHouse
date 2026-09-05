@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { Tenant, User, Invite } from '../models/index.js';
 import { env, getPlan } from '../config/env.js';
 import { uniqueTenantId } from '../utils/slug.js';
-import { generateInviteCode, addYears } from '../utils/codes.js';
+import { generateInviteCode, addYears, isFieldQrCode } from '../utils/codes.js';
 import {
   accessPayload,
   hashToken,
@@ -197,9 +197,10 @@ export const joinAssistant = asyncHandler(async (req, res) => {
   let tenant = await Tenant.findOne({ joinCode: code });
   if (!tenant) tenant = await Tenant.findOne({ tenantId: String(req.params.code || '').toLowerCase() });
 
-  const invites = tenant
+  const invites = (tenant
     ? await Invite.find({ tenantId: tenant.tenantId, isActive: true })
-    : await Invite.find({ code, isActive: true });
+    : await Invite.find({ code, isActive: true })
+  ).filter((row) => !isFieldQrCode(row.code));
 
   if (!invites.length) {
     return res.status(404).json({ message: 'This invite link is invalid or has been revoked.' });

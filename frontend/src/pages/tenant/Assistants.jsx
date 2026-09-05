@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import SheetTable from '../../components/SheetTable';
 import { downloadCsv, printSheet, sortSheetRows } from '../../utils/sheetExport';
 import HallHero from '../../components/HallHero';
+import FieldQrPanel from '../../components/FieldQrPanel';
 
 export default function Assistants() {
   const { tenant, supportMode } = useAuth();
@@ -147,7 +148,7 @@ export default function Assistants() {
       <HallHero
         eyebrow={`${tenant?.schoolName || ''} · /${tenant?.tenantId || ''}`}
         title="Assistants"
-        subtitle="One hall link for everyone. Tap an assistant to see who they verified."
+        subtitle="One hall link for assistants. Generate field QR codes so students can search and verify themselves."
       />
 
       {(joinUrl || joinPath) && (
@@ -157,6 +158,8 @@ export default function Assistants() {
           <p className="text-sm text-ink/60 mt-1">Path: {joinPath}</p>
         </div>
       )}
+
+      <FieldQrPanel supportMode={supportMode} />
 
       {!supportMode && (
         <form onSubmit={create} className="card p-5 mt-6 grid gap-3 md:grid-cols-[1fr_1fr_auto]">

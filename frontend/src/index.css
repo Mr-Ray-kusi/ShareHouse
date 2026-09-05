@@ -66,3 +66,14 @@ body {
 .desk-search {
   @apply w-full rounded-full border-2 border-[#2563eb] bg-white pl-11 pr-4 py-2.5 text-sm outline-none;
 }
+
+@media print {
+  aside,
+  header,
+  .kente-bar,
+  .btn,
+  .btn-primary,
+  .btn-ghost {
+    display: none !important;
+  }
+}

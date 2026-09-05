@@ -7,6 +7,8 @@ import collectionRoutes from './collections.js';
 import dashboardRoutes from './dashboard.js';
 import superRoutes from './super.js';
 import telemetryRoutes from './telemetry.js';
+import fieldRoutes from './field.js';
+import fieldQrRoutes from './fieldQr.js';
 
 const router = Router();
 
@@ -22,5 +24,7 @@ router.use('/collections', collectionRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/super', superRoutes);
 router.use('/telemetry', telemetryRoutes);
+router.use('/field', fieldRoutes);
+router.use('/field-qr', fieldQrRoutes);
 
 export default router;

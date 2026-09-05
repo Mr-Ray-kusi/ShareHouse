@@ -10,6 +10,14 @@ export function generateInviteCode(tenantName) {
   return `${prefix}-${rand}`;
 }
 
+export function generateFieldQrToken() {
+  return `FLD-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
+}
+
+export function isFieldQrCode(code) {
+  return /^FLD-[0-9A-F]{12,}$/i.test(String(code || ''));
+}
+
 export function generateInvitePassword() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let out = '';
