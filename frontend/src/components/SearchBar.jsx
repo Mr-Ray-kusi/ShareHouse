@@ -11,7 +11,6 @@ export default function SearchBar({
 }) {
   function emit(next) {
     onChange(next);
-    onSearch?.(next);
     window.clearTimeout(searchTimer);
     const term = String(next || '').trim();
     if (term.length >= 2) {

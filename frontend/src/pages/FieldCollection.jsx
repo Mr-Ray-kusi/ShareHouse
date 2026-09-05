@@ -19,13 +19,6 @@ export default function FieldCollection() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const t = window.setTimeout(() => {
-      if (q.trim().length >= 2) runSearch(q);
-    }, 350);
-    return () => window.clearTimeout(t);
-  }, [q, token]);
-
-  useEffect(() => {
     api
       .get(`/api/field/${token}`)
       .then(({ data }) => {
@@ -116,7 +109,13 @@ export default function FieldCollection() {
         )}
         <SearchBar
           value={q}
-          onChange={setQ}
+          onChange={(next) => {
+            setQ(next);
+            if (searched) {
+              setSearched(false);
+              setRows([]);
+            }
+          }}
           onSearch={runSearch}
           placeholder="Search name, ID, or program"
         />
