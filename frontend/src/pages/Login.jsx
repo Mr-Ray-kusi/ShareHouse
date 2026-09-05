@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AuthScreen from '../components/AuthScreen';
+import PasswordField from '../components/PasswordField';
 
 function homeFor(role) {
   if (role === 'super_admin') return '/super/health';
@@ -66,9 +67,7 @@ export default function Login() {
           </div>
           <div>
             <label className="label">Password</label>
-            <input
-              className="input"
-              type="password"
+            <PasswordField
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

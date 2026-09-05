@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AuthScreen from '../components/AuthScreen';
+import PasswordField from '../components/PasswordField';
 
 const empty = {
   name: '',
@@ -94,7 +95,7 @@ export default function Register() {
           </div>
           <div>
             <label className="label">Password</label>
-            <input className="input" type="password" minLength={8} value={form.password} onChange={(e) => set('password', e.target.value)} required />
+            <PasswordField minLength={8} autoComplete="new-password" value={form.password} onChange={(e) => set('password', e.target.value)} required />
           </div>
         </div>
         <button className="btn-primary w-full md:w-auto md:px-10" disabled={busy}>{busy ? 'Opening Paystack…' : 'Continue to payment'}</button>
