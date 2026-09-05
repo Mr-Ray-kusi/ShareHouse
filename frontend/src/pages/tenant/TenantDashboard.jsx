@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Download, Printer } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api, { getAccessToken } from '../../api/client';
+import { apiOrigin } from '../../api/baseUrl';
 import { useAuth } from '../../context/AuthContext';
 import SheetTable from '../../components/SheetTable';
 import SearchBar, { ColumnFilters, applyFilters, rowMatchesQuery } from '../../components/SearchBar';
@@ -65,7 +66,7 @@ export default function TenantDashboard() {
   useEffect(() => {
     const token = getAccessToken();
     if (!token) return undefined;
-    const socket = io(import.meta.env.VITE_API_URL || undefined, {
+    const socket = io(apiOrigin() || undefined, {
       auth: { token },
     });
     socket.on('collection:new', (payload) => {

@@ -2,5 +2,9 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://sharehouse-yv9s.onrender.com/api/:path*" },
+    { "source": "/socket.io/:path*", "destination": "https://sharehouse-yv9s.onrender.com/socket.io/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }

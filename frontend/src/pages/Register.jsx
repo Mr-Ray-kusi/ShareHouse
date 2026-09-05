@@ -38,10 +38,12 @@ export default function Register() {
       }
       window.location.href = url;
     } catch (err) {
-      const apiMessage = err.response?.data?.message;
+      const apiMessage = typeof err.response?.data?.message === 'string' ? err.response.data.message : '';
       if (apiMessage) setError(apiMessage);
-      else if (err.request && !err.response) {
-        setError('Could not reach the API. Check VITE_API_URL and that FRONTEND_URL on Render matches this site exactly (no trailing slash).');
+      else if (err.response?.status === 405) {
+        setError('Signup did not reach the API. Wait for a fresh deploy, then try again.');
+      } else if (err.request && !err.response) {
+        setError('Could not reach the API. Check that FRONTEND_URL on Render matches this site exactly (no trailing slash).');
       } else {
         setError(err.message || 'Registration failed.');
       }
