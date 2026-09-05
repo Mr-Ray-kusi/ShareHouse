@@ -60,12 +60,7 @@ npm run dev
 - API: http://localhost:5000/api/health  
 - Web: http://localhost:5173  
 
-Default super admin (from `.env`):
-
-- Email: `samuel.w@example.com`
-- Password: `ChangeMeNow1!`
-
-Change both before any real deployment.
+Set `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` in `backend/.env` (local) and on the API host (production). Those values are never committed. The API creates or updates the single system admin on boot and disables any previous default accounts.
 
 ## Paystack webhook
 

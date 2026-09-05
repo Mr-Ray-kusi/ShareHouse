@@ -11,7 +11,7 @@ import { connectDb } from './config/db.js';
 import routes from './routes/index.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { telemetryMiddleware } from './services/telemetry.js';
-import { ensureSuperAdmin, ensureDemoHall } from './scripts/seedSuperAdmin.js';
+import { ensureSuperAdmin } from './scripts/seedSuperAdmin.js';
 import { Invite } from './models/index.js';
 import { verifyAccessToken } from './utils/tokens.js';
 
@@ -92,7 +92,6 @@ async function start() {
     console.warn('Could not sync invite indexes:', err.message);
   }
   await ensureSuperAdmin();
-  if (env.nodeEnv !== 'production') await ensureDemoHall();
   server.listen(env.port, () => {
     console.log(`WelfareShare API on port ${env.port}`);
   });

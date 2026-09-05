@@ -4,8 +4,12 @@
   "private": true,
   "type": "module",
   "main": "src/server.js",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "node --watch src/server.js",
+    "build": "node -e \"console.log('WelfareShare API: no compile step')\"",
     "start": "node src/server.js",
     "seed": "node src/scripts/seedSuperAdmin.js"
   },

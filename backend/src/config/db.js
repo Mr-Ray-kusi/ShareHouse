@@ -9,7 +9,7 @@ export async function connectDb() {
   const { error } = await getSb().from('tenants').select('id').limit(1);
   if (error) {
     throw new Error(
-      `Supabase is not ready (${error.message}). Create a project, then run backend/supabase/schema.sql in the SQL Editor.`
+      `Supabase is not ready (${error.message}). SUPABASE_URL must be the project origin only, e.g. https://xxxx.supabase.co — not /rest/v1 and not the database connection string. Then run backend/supabase/schema.sql in the SQL Editor.`
     );
   }
   console.log('Supabase connected');

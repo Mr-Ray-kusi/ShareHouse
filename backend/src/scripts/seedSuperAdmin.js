@@ -1,69 +1,65 @@
-import { Tenant, User } from '../models/index.js';
+import { User } from '../models/index.js';
 import { env } from '../config/env.js';
-import { addYears } from '../utils/codes.js';
+
+const DEMO_EMAILS = ['samuel.w@example.com', 'president@atlantic.hall'];
 
 export async function ensureSuperAdmin() {
-  const email = env.superAdminEmail.toLowerCase();
-  const existing = await User.findOne({ role: 'super_admin', email });
-  if (existing) return existing;
+  const email = env.superAdminEmail;
+  const password = env.superAdminPassword;
+  if (!email || !password) {
+    throw new Error('Set SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD in the environment. Do not commit these values to git.');
+  }
+  if (String(password).length < 8) {
+    throw new Error('SUPER_ADMIN_PASSWORD must be at least 8 characters.');
+  }
 
-  const passwordHash = await User.hashPassword(env.superAdminPassword);
-  const user = await User.create({
-    tenantId: null,
-    name: env.superAdminName,
-    email,
-    passwordHash,
+  const passwordHash = await User.hashPassword(password);
+  let user = await User.findOne({ role: 'super_admin', email });
+
+  if (user) {
+    user.passwordHash = passwordHash;
+    user.name = env.superAdminName;
+    user.isActive = true;
+    user.refreshTokens = [];
+    await user.save();
+  } else {
+    user = await User.create({
+      tenantId: null,
+      name: env.superAdminName,
+      email,
+      passwordHash,
+      role: 'super_admin',
+      isActive: true,
+    });
+  }
+
+  const staleAdmins = await User.find({
     role: 'super_admin',
-    isActive: true,
+    email: { $ne: email },
   });
+  for (const other of staleAdmins) {
+    other.isActive = false;
+    other.refreshTokens = [];
+    await other.save();
+  }
+
+  for (const demoEmail of DEMO_EMAILS) {
+    if (demoEmail === email) continue;
+    const demo = await User.findOne({ email: demoEmail });
+    if (demo) {
+      demo.isActive = false;
+      demo.refreshTokens = [];
+      await demo.save();
+    }
+  }
+
   console.log(`Super admin ready: ${email}`);
   return user;
-}
-
-export async function ensureDemoHall() {
-  const tenantId = 'atlantic-hall-knust';
-  const email = 'president@atlantic.hall';
-  let tenant = await Tenant.findOne({ tenantId });
-  if (!tenant) {
-    tenant = await Tenant.create({
-      tenantId,
-      name: 'Atlantic Hall',
-      schoolName: 'KNUST',
-      adminName: 'Hall President',
-      adminEmail: email,
-      adminPhone: '0240000000',
-      subscriptionPlan: 'hall',
-      subscriptionFee: 500,
-      isActive: true,
-      expiryDate: addYears(new Date(), 1),
-      joinCode: 'ATL-HALL',
-    });
-  } else if (!tenant.joinCode) {
-    tenant.joinCode = 'ATL-HALL';
-    await tenant.save();
-  }
-
-  const existing = await User.findOne({ email });
-  if (!existing) {
-    const passwordHash = await User.hashPassword(env.superAdminPassword);
-    await User.create({
-      tenantId,
-      name: 'Hall President',
-      email,
-      phone: tenant.adminPhone,
-      passwordHash,
-      role: 'tenant_admin',
-      isActive: true,
-    });
-    console.log(`Demo hall admin ready: ${email}`);
-  }
-  return tenant;
 }
 
 if (process.argv[1] && process.argv[1].includes('seedSuperAdmin')) {
   const { connectDb } = await import('../config/db.js');
   await connectDb();
   await ensureSuperAdmin();
-  await ensureDemoHall();
   process.exit(0);
 }
