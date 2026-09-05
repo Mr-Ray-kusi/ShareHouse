@@ -37,7 +37,13 @@ export default function Register() {
       }
       window.location.href = url;
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed.');
+      const apiMessage = err.response?.data?.message;
+      if (apiMessage) setError(apiMessage);
+      else if (err.request && !err.response) {
+        setError('Could not reach the API. Check VITE_API_URL and that FRONTEND_URL on Render matches this site exactly (no trailing slash).');
+      } else {
+        setError(err.message || 'Registration failed.');
+      }
       setBusy(false);
     }
   }

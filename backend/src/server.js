@@ -18,9 +18,16 @@ import { verifyAccessToken } from './utils/tokens.js';
 const app = express();
 const server = http.createServer(app);
 
+function corsOrigin(origin, callback) {
+  if (!origin) return callback(null, true);
+  const normalized = String(origin).replace(/\/+$/, '');
+  if (env.frontendOrigins.includes(normalized)) return callback(null, origin);
+  return callback(new Error('Not allowed by CORS'));
+}
+
 const io = new Server(server, {
   cors: {
-    origin: env.frontendUrl,
+    origin: corsOrigin,
     credentials: true,
   },
 });
@@ -48,7 +55,7 @@ app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(
   cors({
-    origin: env.frontendUrl,
+    origin: corsOrigin,
     credentials: true,
   })
 );
