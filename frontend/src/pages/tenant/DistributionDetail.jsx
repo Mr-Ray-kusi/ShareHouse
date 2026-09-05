@@ -95,18 +95,25 @@ export default function DistributionDetail() {
       />
 
       {!supportMode && (
-        <div className="flex flex-wrap gap-2 mt-5">
-          {dist.status !== 'active' && (
-            <button className="btn-primary" disabled={busy} onClick={() => setStatus('active')}>Make active</button>
-          )}
-          {dist.status === 'active' && (
-            <button className="btn-ghost" disabled={busy} onClick={() => setStatus('completed')}>Mark completed</button>
+        <div className="mt-5 space-y-2">
+          {dist.status === 'active' ? (
+            <div className="flex flex-row items-stretch gap-2">
+              <button className="btn-ghost flex-1 sm:flex-none" disabled={busy} onClick={() => setStatus('completed')}>Mark completed</button>
+              <label className="btn-gold cursor-pointer flex-1 sm:flex-none text-center">
+                {busy ? 'Uploading…' : 'Upload Excel list'}
+                <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={upload} disabled={busy} />
+              </label>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-primary" disabled={busy} onClick={() => setStatus('active')}>Make active</button>
+              <label className="btn-gold cursor-pointer">
+                {busy ? 'Uploading…' : 'Upload Excel list'}
+                <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={upload} disabled={busy} />
+              </label>
+            </div>
           )}
           <button className="btn-ghost" onClick={downloadTemplate}>Download Excel template (CSV)</button>
-          <label className="btn-gold cursor-pointer">
-            {busy ? 'Uploading…' : 'Upload Excel list'}
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={upload} disabled={busy} />
-          </label>
         </div>
       )}
       {uploadMsg && <p className="text-sm text-forest-700 mt-3">{uploadMsg}</p>}

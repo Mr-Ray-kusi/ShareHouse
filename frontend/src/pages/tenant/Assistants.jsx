@@ -199,10 +199,10 @@ export default function Assistants() {
           const secret = inv.password || inv.passwordPlain || '';
           return (
             <div key={inv._id} className={`card overflow-hidden ${open ? 'ring-2 ring-forest-600' : ''}`}>
-              <div className="flex items-center gap-2 p-4 overflow-x-auto">
+              <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center">
                 <button
                   type="button"
-                  className="min-w-[10rem] flex-1 text-left hover:opacity-80"
+                  className="min-w-0 flex-1 text-left hover:opacity-80"
                   onClick={() => selectAssistant(inv._id)}
                 >
                   <p className="font-semibold">
@@ -215,11 +215,11 @@ export default function Assistants() {
                     {open ? ' · showing verified list' : ' · tap to view verified students'}
                   </p>
                 </button>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
                   {secret ? (
                     <button
                       type="button"
-                      className="btn-ghost text-xs font-mono"
+                      className="btn-ghost text-xs font-mono shrink-0"
                       title="Copy password"
                       onClick={() => copyPassword(inv._id, secret)}
                     >
@@ -232,18 +232,18 @@ export default function Assistants() {
                       {inv.isActive && (
                         <button
                           type="button"
-                          className="btn-ghost text-xs"
+                          className="btn-ghost text-xs shrink-0"
                           onClick={() => { setResetId(inv._id); setResetPassword(''); }}
                         >
                           Set password
                         </button>
                       )}
                       {inv.isActive ? (
-                        <button type="button" className="btn-ghost text-xs text-red-700" onClick={() => revoke(inv._id)}>Revoke</button>
+                        <button type="button" className="btn-ghost text-xs text-red-700 shrink-0" onClick={() => revoke(inv._id)}>Revoke</button>
                       ) : (
-                        <button type="button" className="btn-ghost text-xs" onClick={() => restore(inv._id)}>Restore</button>
+                        <button type="button" className="btn-ghost text-xs shrink-0" onClick={() => restore(inv._id)}>Restore</button>
                       )}
-                      <button type="button" className="btn-ghost text-xs text-red-700" onClick={() => remove(inv._id)}>
+                      <button type="button" className="btn-ghost text-xs text-red-700 shrink-0" onClick={() => remove(inv._id)}>
                         <Trash2 size={14} /> Delete
                       </button>
                     </>
