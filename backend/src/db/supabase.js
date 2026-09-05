@@ -1,5 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
+import WebSocketImpl from 'ws';
 import { env } from '../config/env.js';
+
+if (typeof globalThis.WebSocket === 'undefined') {
+  globalThis.WebSocket = WebSocketImpl;
+}
 
 let client;
 
@@ -10,6 +15,7 @@ export function getSb() {
     }
     client = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
+      realtime: { transport: WebSocketImpl },
     });
   }
   return client;
