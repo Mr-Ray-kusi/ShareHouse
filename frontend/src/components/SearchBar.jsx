@@ -32,7 +32,7 @@ export default function SearchBar({
       <label className="input flex items-center gap-2 sm:gap-3 flex-1 min-w-0 !px-3">
         <Search className="shrink-0 text-forest-700" size={18} />
         <input
-          className="min-w-0 flex-1 bg-transparent border-0 outline-none py-0.5 text-sm placeholder:text-ink/45"
+          className="min-w-0 flex-1 bg-transparent border-0 outline-none py-0.5 text-base placeholder:text-ink/45"
           placeholder={placeholder}
           value={value}
           onChange={(e) => emit(e.target.value)}
@@ -135,7 +135,7 @@ export function ColumnFilters({ headers = [], rows = [], filters = {}, onChange 
     <div className="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
       {genderHeader && (
         <select
-          className="input py-2 text-sm w-full min-w-0 sm:min-w-[140px]"
+          className="input py-2 w-full min-w-0 sm:min-w-[140px]"
           value={filters.gender || ''}
           onChange={(e) => onChange({ ...filters, gender: e.target.value })}
         >
@@ -147,7 +147,7 @@ export function ColumnFilters({ headers = [], rows = [], filters = {}, onChange 
       )}
       {levelHeader && (
         <select
-          className="input py-2 text-sm w-full min-w-0 sm:min-w-[140px]"
+          className="input py-2 w-full min-w-0 sm:min-w-[140px]"
           value={filters.level || ''}
           onChange={(e) => onChange({ ...filters, level: e.target.value })}
         >

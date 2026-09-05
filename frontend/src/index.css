@@ -52,7 +52,7 @@ body {
 }
 
 .input {
-  @apply w-full rounded-xl border border-forest-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-100;
+  @apply w-full rounded-xl border border-forest-200 bg-white px-3.5 py-2.5 text-base outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-100;
 }
 
 .label {

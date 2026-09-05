@@ -74,14 +74,14 @@ export default function FieldQrPanel({ supportMode }) {
         <div className="p-5 lg:bg-ink lg:text-cream lg:p-6 flex flex-col gap-4">
           <div>
             <p className="text-xs uppercase tracking-widest text-forest-700 lg:text-gold-400">Field QR codes</p>
-            <h2 className="font-display text-2xl lg:text-3xl mt-1">Self-verify stations</h2>
+            <h2 className="font-display text-2xl lg:text-3xl mt-1">Self-verification</h2>
             {campaign ? (
               <p className="hidden lg:block text-sm text-cream/65 mt-2">{campaign.title}</p>
             ) : null}
           </div>
           <label className="block">
             <span className="label lg:text-cream/70">Campaign</span>
-            <select className="input lg:bg-white" value={distributionId} onChange={(e) => setDistributionId(e.target.value)}>
+            <select className="input bg-forest-50 text-ink border-forest-200 lg:bg-forest-50" value={distributionId} onChange={(e) => setDistributionId(e.target.value)}>
               {!distributions.length && <option value="">No campaign yet</option>}
               {distributions.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -97,7 +97,7 @@ export default function FieldQrPanel({ supportMode }) {
                 {busy ? 'Generating…' : 'Generate QR code'}
               </button>
             )}
-            <button className="btn-ghost flex-1 lg:w-full lg:border-white/20 lg:text-cream lg:hover:bg-white/10" type="button" disabled={!visible.length} onClick={() => window.print()}>
+            <button className="btn flex-1 lg:w-full border-0 bg-forest-50 text-forest-900 hover:bg-forest-100" type="button" disabled={!visible.length} onClick={() => window.print()}>
               <Printer size={14} /> Print
             </button>
           </div>
@@ -123,7 +123,7 @@ export default function FieldQrPanel({ supportMode }) {
                     <div className="min-w-0 flex-1 mt-2 lg:mt-0">
                       <p className="font-semibold">{row.label}</p>
                       <p className="text-[11px] font-mono break-all text-ink/55 mt-1">{url}</p>
-                      <div className="mt-2 flex flex-wrap justify-center lg:justify-start gap-1 print:hidden">
+                      <div className="mt-2 flex flex-row justify-center gap-1 lg:hidden print:hidden">
                         {!supportMode && (
                           <button type="button" className="btn-ghost text-xs text-red-700" onClick={() => remove(row.id)}>
                             <Trash2 size={12} /> Delete
@@ -133,6 +133,16 @@ export default function FieldQrPanel({ supportMode }) {
                           <Download size={12} /> Save
                         </button>
                       </div>
+                    </div>
+                    <div className="hidden lg:flex flex-col gap-2 shrink-0 print:hidden">
+                      {!supportMode && (
+                        <button type="button" className="btn-ghost text-xs text-red-700 w-full" onClick={() => remove(row.id)}>
+                          <Trash2 size={12} /> Delete
+                        </button>
+                      )}
+                      <button type="button" className="btn-ghost text-xs w-full" onClick={() => downloadQr(row)}>
+                        <Download size={12} /> Save
+                      </button>
                     </div>
                   </div>
                 );
