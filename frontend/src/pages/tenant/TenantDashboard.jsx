@@ -8,7 +8,6 @@ import SheetTable from '../../components/SheetTable';
 import SearchBar, { ColumnFilters, applyFilters, rowMatchesQuery } from '../../components/SearchBar';
 import { downloadCsv, printSheet, sortSheetRows } from '../../utils/sheetExport';
 import HallHero from '../../components/HallHero';
-import UnitCodeBanner from '../../components/UnitCodeBanner';
 
 function activityRow(item) {
   return {
@@ -138,9 +137,8 @@ export default function TenantDashboard() {
         }
       />
       {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
-      {data?.unitCode ? <div className="mt-4"><UnitCodeBanner code={data.unitCode} compact /></div> : null}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-2">
         {cards.map((card) => {
           const active = view === card.key;
           return (

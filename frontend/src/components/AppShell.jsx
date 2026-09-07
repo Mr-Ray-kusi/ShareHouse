@@ -95,7 +95,7 @@ export default function AppShell() {
             <LogOut size={14} />
           </button>
         </header>
-        <div className="md:hidden shrink-0 flex gap-2 overflow-x-auto px-3 py-2 bg-white border-b border-forest-100">
+        <div className="md:hidden shrink-0 flex justify-center gap-2 px-3 py-2 bg-white border-b border-forest-100">
           {links.map((link) => (
             <NavLink
               key={link.to}

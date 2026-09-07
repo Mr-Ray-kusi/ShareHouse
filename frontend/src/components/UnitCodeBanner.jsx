@@ -31,14 +31,14 @@ export default function UnitCodeBanner({
   }
 
   return (
-    <div className={`rounded-2xl border border-gold-400/40 bg-gold-500/15 ${compact ? 'px-3 py-2' : 'p-4'} print:hidden`}>
-      <div className="flex items-center gap-3">
-        <div className="h-9 w-9 shrink-0 rounded-xl bg-gold-500 text-ink grid place-items-center">
-          <KeyRound size={18} />
+    <div className={`rounded-2xl border border-gold-400/40 bg-gold-500/15 ${compact ? 'px-2.5 py-1.5 md:px-3 md:py-2' : 'p-3 md:p-4'} print:hidden`}>
+      <div className="flex items-center gap-2 md:gap-3">
+        <div className="h-7 w-7 md:h-9 md:w-9 shrink-0 rounded-lg md:rounded-xl bg-gold-500 text-ink grid place-items-center">
+          <KeyRound className="h-3.5 w-3.5 md:h-[18px] md:w-[18px]" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] uppercase tracking-[0.16em] text-forest-800/70">Unit code · staff only</p>
-          <p className="font-mono text-xl font-semibold tracking-[0.18em]">{value}</p>
+          <p className="text-[9px] md:text-[10px] uppercase tracking-[0.14em] md:tracking-[0.16em] text-forest-800/70">Unit code · staff only</p>
+          <p className="font-mono text-sm md:text-xl font-semibold tracking-[0.12em] md:tracking-[0.18em]">{value}</p>
         </div>
         <button type="button" className="btn-ghost text-xs shrink-0" onClick={copy}>
           {copied ? <Check size={14} /> : <Copy size={14} />}

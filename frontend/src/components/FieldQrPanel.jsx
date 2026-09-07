@@ -84,6 +84,17 @@ export default function FieldQrPanel({ supportMode }) {
 
   return (
     <div className="card mt-6 overflow-hidden">
+      {unitCode ? (
+        <div className="px-4 pt-4 pb-5 md:px-5 md:pt-5 md:pb-6 border-b border-forest-100">
+          <UnitCodeBanner
+            compact
+            code={unitCode}
+            onRotate={rotate}
+            rotating={rotating}
+            canRotate={!supportMode && Boolean(unitCode)}
+          />
+        </div>
+      ) : null}
       <div className="lg:grid lg:grid-cols-[minmax(260px,300px)_1fr]">
         <div className="p-5 lg:bg-ink lg:text-cream lg:p-6 flex flex-col gap-4">
           <div>
@@ -122,12 +133,6 @@ export default function FieldQrPanel({ supportMode }) {
 
         <div className="p-5 lg:p-6 lg:bg-mist/50 space-y-4">
           {error && <p className="text-sm text-red-700">{error}</p>}
-          <UnitCodeBanner
-            code={unitCode}
-            onRotate={rotate}
-            rotating={rotating}
-            canRotate={!supportMode && Boolean(unitCode)}
-          />
           {shared ? (
             <div className="rounded-2xl border border-forest-100 bg-white p-3 text-center lg:text-left lg:flex lg:items-center lg:gap-4 break-inside-avoid">
               <img
