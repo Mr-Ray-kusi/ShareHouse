@@ -2,21 +2,27 @@ import { Search } from 'lucide-react';
 import { emitTelemetry } from '../telemetry';
 
 let searchTimer;
+let liveTimer;
 
 export default function SearchBar({
   value,
   onChange,
   onSearch,
   placeholder = 'Search name or ID',
+  debounceMs = 0,
 }) {
   function emit(next) {
     onChange(next);
     window.clearTimeout(searchTimer);
+    window.clearTimeout(liveTimer);
     const term = String(next || '').trim();
     if (term.length >= 2) {
       searchTimer = window.setTimeout(() => {
         emitTelemetry({ name: 'site_search', term, path: window.location.pathname });
       }, 700);
+    }
+    if (debounceMs && onSearch) {
+      liveTimer = window.setTimeout(() => onSearch(term), debounceMs);
     }
   }
 

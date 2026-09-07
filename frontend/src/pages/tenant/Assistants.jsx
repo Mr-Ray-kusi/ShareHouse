@@ -164,7 +164,7 @@ export default function Assistants() {
       <HallHero
         eyebrow={`${tenant?.schoolName || ''} · /${tenant?.tenantId || ''}`}
         title="Assistants"
-        subtitle="One hall link for assistants. Generate field QR codes so students can search and verify themselves."
+        subtitle="One hall link for assistants. Print one collection QR; keep the unit code with staff only."
       />
 
       {(joinUrl || joinPath) && (

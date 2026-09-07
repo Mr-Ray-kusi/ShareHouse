@@ -73,7 +73,8 @@ body {
   .kente-bar,
   .btn,
   .btn-primary,
-  .btn-ghost {
+  .btn-ghost,
+  .btn-gold {
     display: none !important;
   }
 }

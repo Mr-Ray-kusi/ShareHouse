@@ -86,7 +86,15 @@ const authLimiter = rateLimit({
 });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/join', authLimiter);
-app.use('/api/field', authLimiter);
+
+const fieldLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 180,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many collection requests. Try again in a moment.' },
+});
+app.use('/api/field', fieldLimiter);
 
 app.use('/api', routes);
 app.use(notFound);

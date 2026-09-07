@@ -305,10 +305,13 @@ export const refresh = asyncHandler(async (req, res) => {
 
 export const logout = asyncHandler(async (req, res) => {
   const token = req.cookies?.ws_refresh;
-  if (token && req.user) {
-    const tokenHash = hashToken(token);
-    req.user.refreshTokens = (req.user.refreshTokens || []).filter((t) => t.tokenHash !== tokenHash);
-    await req.user.save();
+  if (token && req.user?._id) {
+    const user = await User.findById(req.user._id);
+    if (user) {
+      const tokenHash = hashToken(token);
+      user.refreshTokens = (user.refreshTokens || []).filter((t) => t.tokenHash !== tokenHash);
+      await user.save();
+    }
   }
   clearRefreshCookie(res);
   return res.json({ message: 'Signed out.' });

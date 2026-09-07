@@ -2,16 +2,37 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import api, { setAccessToken, getAccessToken } from '../api/client';
 
 const AuthContext = createContext(null);
+const SESSION_KEY = 'ws_session';
+
+function readCachedSession() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : { user: null, tenant: null };
+  } catch {
+    return { user: null, tenant: null };
+  }
+}
+
+function writeCachedSession(user, tenant) {
+  try {
+    if (user) sessionStorage.setItem(SESSION_KEY, JSON.stringify({ user, tenant: tenant || null }));
+    else sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [tenant, setTenant] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const cached = readCachedSession();
+  const [user, setUser] = useState(cached.user);
+  const [tenant, setTenant] = useState(cached.tenant);
+  const [loading, setLoading] = useState(!cached.user);
 
   function applySession(data) {
     if (data?.accessToken) setAccessToken(data.accessToken);
     if (data?.user) setUser(data.user);
     if (data?.tenant !== undefined) setTenant(data.tenant);
+    if (data?.user) writeCachedSession(data.user, data.tenant);
   }
 
   async function bootstrap() {
@@ -19,14 +40,20 @@ export function AuthProvider({ children }) {
       if (!getAccessToken()) {
         const { data } = await api.post('/api/auth/refresh');
         applySession(data);
+        if (data?.user) {
+          setLoading(false);
+          return;
+        }
       }
       const { data } = await api.get('/api/auth/me');
       setUser(data.user);
       setTenant(data.tenant);
+      writeCachedSession(data.user, data.tenant);
     } catch (_err) {
       setAccessToken(null);
       setUser(null);
       setTenant(null);
+      writeCachedSession(null);
     } finally {
       setLoading(false);
     }
@@ -63,12 +90,14 @@ export function AuthProvider({ children }) {
     setAccessToken(null);
     setUser(null);
     setTenant(null);
+    writeCachedSession(null);
   }
 
   async function refreshMe() {
     const { data } = await api.get('/api/auth/me');
     setUser(data.user);
     setTenant(data.tenant);
+    writeCachedSession(data.user, data.tenant);
     return data;
   }
 

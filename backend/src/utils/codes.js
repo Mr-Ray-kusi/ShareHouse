@@ -28,6 +28,20 @@ export function generateInvitePassword() {
   return out;
 }
 
+export function generateUnitCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  const bytes = crypto.randomBytes(6);
+  for (let i = 0; i < 6; i += 1) {
+    out += alphabet[bytes[i] % alphabet.length];
+  }
+  return out;
+}
+
+export function normalizeUnitCode(value) {
+  return String(value || '').replace(/[\s-]+/g, '').toUpperCase();
+}
+
 export function addYears(date, years) {
   const next = new Date(date);
   next.setFullYear(next.getFullYear() + years);

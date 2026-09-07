@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Download, Printer, QrCode, Trash2 } from 'lucide-react';
+import { Download, Printer, QrCode } from 'lucide-react';
 import api from '../api/client';
+import UnitCodeBanner from './UnitCodeBanner';
 
 function qrImage(url) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=8&data=${encodeURIComponent(url)}`;
@@ -13,15 +14,18 @@ function fieldLink(row) {
 export default function FieldQrPanel({ supportMode }) {
   const [distributions, setDistributions] = useState([]);
   const [qrs, setQrs] = useState([]);
+  const [unitCode, setUnitCode] = useState('');
   const [distributionId, setDistributionId] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [rotating, setRotating] = useState(false);
 
   async function load() {
     const { data } = await api.get('/api/field-qr');
     const dists = data.distributions || [];
     setDistributions(dists);
     setQrs(data.qrs || []);
+    setUnitCode(data.unitCode || '');
     setDistributionId((prev) => {
       if (prev && dists.some((d) => d.id === prev)) return prev;
       const active = dists.find((d) => d.status === 'active');
@@ -34,17 +38,19 @@ export default function FieldQrPanel({ supportMode }) {
   }, []);
 
   const visible = useMemo(
-    () => qrs.filter((row) => row.isActive && (!distributionId || row.distributionId === distributionId)),
+    () => qrs.filter((row) => row.isActive && (!distributionId || row.distributionId === distributionId)).slice(0, 1),
     [qrs, distributionId]
   );
   const campaign = distributions.find((d) => d.id === distributionId);
+  const shared = visible[0];
 
   async function generate() {
     setBusy(true);
     setError('');
     try {
       const { data } = await api.post('/api/field-qr', { distributionId, count: 1 });
-      setQrs((prev) => [...(data.qrs || []), ...prev]);
+      setQrs(data.qrs || []);
+      if (data.unitCode) setUnitCode(data.unitCode);
     } catch (err) {
       setError(err.response?.data?.message || 'Could not generate QR code.');
     } finally {
@@ -52,17 +58,25 @@ export default function FieldQrPanel({ supportMode }) {
     }
   }
 
-  async function remove(id) {
-    if (!window.confirm('Delete this QR code? Scanners will no longer reach the list.')) return;
-    await api.post(`/api/field-qr/${id}/delete`);
-    setQrs((prev) => prev.filter((row) => row.id !== id));
+  async function rotate() {
+    if (!window.confirm('Create a new unit code? Old posters still work, but students must use the new code to verify.')) return;
+    setRotating(true);
+    setError('');
+    try {
+      const { data } = await api.post('/api/field-qr/rotate-unit');
+      setUnitCode(data.unitCode || '');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not rotate the unit code.');
+    } finally {
+      setRotating(false);
+    }
   }
 
   function downloadQr(row) {
     const url = fieldLink(row);
     const a = document.createElement('a');
     a.href = qrImage(url);
-    a.download = `${row.label.replace(/\s+/g, '-')}.png`;
+    a.download = `${(row.label || 'collection-qr').replace(/\s+/g, '-')}.png`;
     a.target = '_blank';
     a.rel = 'noreferrer';
     a.click();
@@ -74,10 +88,13 @@ export default function FieldQrPanel({ supportMode }) {
         <div className="p-5 lg:bg-ink lg:text-cream lg:p-6 flex flex-col gap-4">
           <div>
             <p className="text-xs uppercase tracking-widest text-forest-700 lg:text-gold-400">Field QR codes</p>
-            <h2 className="font-display text-2xl lg:text-3xl mt-1">Self-verification</h2>
+            <h2 className="font-display text-2xl lg:text-3xl mt-1">Collection QR</h2>
             {campaign ? (
               <p className="hidden lg:block text-sm text-cream/65 mt-2">{campaign.title}</p>
             ) : null}
+            <p className="hidden lg:block text-xs text-cream/50 mt-2">
+              One shared QR for every table. Students still need the unit code to finish verify.
+            </p>
           </div>
           <label className="block">
             <span className="label lg:text-cream/70">Campaign</span>
@@ -90,66 +107,52 @@ export default function FieldQrPanel({ supportMode }) {
               ))}
             </select>
           </label>
-          <div className="flex flex-row lg:flex-col gap-2">
-            {!supportMode && (
+          <div className="flex flex-row lg:flex-col gap-2 print:hidden">
+            {!supportMode && !shared && campaign?.status === 'active' && (
               <button className="btn-gold flex-1 lg:w-full" type="button" disabled={busy || !distributionId} onClick={generate}>
                 <QrCode size={16} />
-                {busy ? 'Generating…' : 'Generate QR code'}
+                {busy ? 'Creating…' : 'Create collection QR'}
               </button>
             )}
-            <button className="btn flex-1 lg:w-full border-0 bg-forest-50 text-forest-900 hover:bg-forest-100" type="button" disabled={!visible.length} onClick={() => window.print()}>
-              <Printer size={14} /> Print
+            <button className="btn flex-1 lg:w-full border-0 bg-forest-50 text-forest-900 hover:bg-forest-100" type="button" disabled={!shared} onClick={() => window.print()}>
+              <Printer size={14} /> Print QR
             </button>
           </div>
-          <p className="hidden lg:block text-xs text-cream/50 mt-auto">{visible.length} station{visible.length === 1 ? '' : 's'}</p>
         </div>
 
-        <div className="p-5 lg:p-6 lg:bg-mist/50">
-          {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
-          {visible.length ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-              {visible.map((row) => {
-                const url = fieldLink(row);
-                return (
-                  <div
-                    key={row.id}
-                    className="rounded-2xl border border-forest-100 bg-white p-3 text-center lg:text-left lg:flex lg:items-center lg:gap-4 break-inside-avoid"
-                  >
-                    <img
-                      src={qrImage(url)}
-                      alt={row.label}
-                      className="mx-auto lg:mx-0 w-full max-w-[180px] lg:w-28 lg:max-w-none aspect-square object-contain bg-white shrink-0"
-                    />
-                    <div className="min-w-0 flex-1 mt-2 lg:mt-0">
-                      <p className="font-semibold">{row.label}</p>
-                      <p className="text-[11px] font-mono break-all text-ink/55 mt-1">{url}</p>
-                      <div className="mt-2 flex flex-row justify-center gap-1 lg:hidden print:hidden">
-                        {!supportMode && (
-                          <button type="button" className="btn-ghost text-xs text-red-700" onClick={() => remove(row.id)}>
-                            <Trash2 size={12} /> Delete
-                          </button>
-                        )}
-                        <button type="button" className="btn-ghost text-xs" onClick={() => downloadQr(row)}>
-                          <Download size={12} /> Save
-                        </button>
-                      </div>
-                    </div>
-                    <div className="hidden lg:flex flex-col gap-2 shrink-0 print:hidden">
-                      {!supportMode && (
-                        <button type="button" className="btn-ghost text-xs text-red-700 w-full" onClick={() => remove(row.id)}>
-                          <Trash2 size={12} /> Delete
-                        </button>
-                      )}
-                      <button type="button" className="btn-ghost text-xs w-full" onClick={() => downloadQr(row)}>
-                        <Download size={12} /> Save
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+        <div className="p-5 lg:p-6 lg:bg-mist/50 space-y-4">
+          {error && <p className="text-sm text-red-700">{error}</p>}
+          <UnitCodeBanner
+            code={unitCode}
+            onRotate={rotate}
+            rotating={rotating}
+            canRotate={!supportMode && Boolean(unitCode)}
+          />
+          {shared ? (
+            <div className="rounded-2xl border border-forest-100 bg-white p-3 text-center lg:text-left lg:flex lg:items-center lg:gap-4 break-inside-avoid">
+              <img
+                src={qrImage(fieldLink(shared))}
+                alt={shared.label}
+                className="mx-auto lg:mx-0 w-full max-w-[180px] lg:w-28 lg:max-w-none aspect-square object-contain bg-white shrink-0"
+              />
+              <div className="min-w-0 flex-1 mt-2 lg:mt-0">
+                <p className="font-semibold">{shared.label || 'Collection QR'}</p>
+                <p className="text-[11px] font-mono break-all text-ink/55 mt-1">{fieldLink(shared)}</p>
+                <p className="text-xs text-ink/55 mt-2">Print this same QR at every table.</p>
+                <div className="mt-2 flex flex-row justify-center gap-1 lg:hidden print:hidden">
+                  <button type="button" className="btn-ghost text-xs" onClick={() => downloadQr(shared)}>
+                    <Download size={12} /> Save
+                  </button>
+                </div>
+              </div>
+              <div className="hidden lg:flex flex-col gap-2 shrink-0 print:hidden">
+                <button type="button" className="btn-ghost text-xs w-full" onClick={() => downloadQr(shared)}>
+                  <Download size={12} /> Save
+                </button>
+              </div>
             </div>
           ) : (
-            <p className="text-sm text-ink/55">No QR codes for this campaign yet.</p>
+            <p className="text-sm text-ink/55">No collection QR for this campaign yet.</p>
           )}
         </div>
       </div>

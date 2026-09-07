@@ -2,6 +2,7 @@ import { Beneficiary, Collection, Distribution } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { foldSearch, searchRegex } from '../utils/search.js';
 import { track } from '../services/telemetry.js';
+import { ensureCollectionUnit, readUnitCode } from '../services/collectionUnit.js';
 
 async function resolveWorkingDistribution(req) {
   if (req.query.distributionId || req.body?.distributionId) {
@@ -35,27 +36,57 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
     ];
   }
 
-  const limit = q ? 80 : 5000;
-  const items = await Beneficiary.find(filter).sort({ fullName: 1, studentIndex: 1 }).limit(limit);
+  const headers = dist.sheetHeaders?.length
+    ? dist.sheetHeaders
+    : ['Student Index', 'Full Name', 'Level', 'Phone'];
+
+  let unitCode = await readUnitCode(req.tenantId);
+  if (!unitCode) {
+    const pack = await ensureCollectionUnit({
+      tenantId: req.tenantId,
+      distributionId: dist._id,
+      createdBy: req.user._id,
+    });
+    unitCode = pack.unitCode;
+  }
+
+  const meta = {
+    distribution: {
+      id: dist._id,
+      title: dist.title,
+      itemName: dist.itemName,
+      status: dist.status,
+      beneficiaryCount: dist.beneficiaryCount,
+    },
+    headers,
+    unitCode,
+  };
+
+  if (req.query.meta === '1' || (!q && req.user.role === 'assistant')) {
+    return res.json({ ...meta, results: [] });
+  }
+
+  const limit = q ? 40 : 5000;
+  const items = await Beneficiary.find(filter)
+    .select('studentIndex fullName level phone sheetRow searchText')
+    .sort({ fullName: 1, studentIndex: 1 })
+    .limit(limit);
   const marks = items.length
     ? await Collection.find({
       tenantId: req.tenantId,
       distributionId: dist._id,
       beneficiaryId: { $in: items.map((b) => b._id) },
-    })
+    }).select('beneficiaryId collectedAt assistantName assistantId')
     : [];
   const markMap = new Map(marks.map((m) => [String(m.beneficiaryId), m]));
-  const headers = dist.sheetHeaders?.length
-    ? dist.sheetHeaders
-    : ['Student Index', 'Full Name', 'Level', 'Phone'];
+  const needle = foldSearch(q);
 
   const ranked = items
     .map((b) => {
       const mark = markMap.get(String(b._id));
-      const hay = foldSearch(`${b.studentIndex} ${b.fullName} ${b.searchText || ''} ${Object.values(b.sheetRow || {}).join(' ')}`);
-      const needle = foldSearch(q);
       let rank = 0;
       if (q) {
+        const hay = foldSearch(`${b.studentIndex} ${b.fullName} ${b.searchText || ''} ${Object.values(b.sheetRow || {}).join(' ')}`);
         if (foldSearch(b.studentIndex) === needle) rank = 3;
         else if (foldSearch(b.studentIndex).startsWith(needle)) rank = 2;
         else if (hay.includes(needle)) rank = 1;
@@ -81,17 +112,10 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
         rank,
       };
     })
-    .sort((a, b) => b.rank - a.rank || a.fullName.localeCompare(b.fullName));
+    .sort((a, b) => (q ? b.rank - a.rank : 0) || a.fullName.localeCompare(b.fullName));
 
   res.json({
-    distribution: {
-      id: dist._id,
-      title: dist.title,
-      itemName: dist.itemName,
-      status: dist.status,
-      beneficiaryCount: dist.beneficiaryCount,
-    },
-    headers,
+    ...meta,
     results: ranked,
   });
 });

@@ -8,6 +8,7 @@ import SheetTable from '../../components/SheetTable';
 import SearchBar, { ColumnFilters, applyFilters, rowMatchesQuery } from '../../components/SearchBar';
 import { downloadCsv, printSheet, sortSheetRows } from '../../utils/sheetExport';
 import HallHero from '../../components/HallHero';
+import UnitCodeBanner from '../../components/UnitCodeBanner';
 
 function activityRow(item) {
   return {
@@ -45,7 +46,6 @@ export default function TenantDashboard() {
   const [view, setView] = useState(null);
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState('asc');
-  const [listReady, setListReady] = useState(false);
 
   async function loadDesk() {
     const { data: d } = await api.get('/api/dashboard');
@@ -57,18 +57,12 @@ export default function TenantDashboard() {
     const { data: d } = await api.get('/api/collections/search');
     setList(d.results || []);
     setHeaders(d.headers || []);
-    setListReady(true);
   }
 
   useEffect(() => {
     loadDesk().catch((err) => setError(err.response?.data?.message || 'Could not load desk.'));
-  }, []);
-
-  useEffect(() => {
-    if (!view || listReady) return undefined;
     loadList().catch(() => {});
-    return undefined;
-  }, [view, listReady]);
+  }, []);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -144,6 +138,7 @@ export default function TenantDashboard() {
         }
       />
       {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+      {data?.unitCode ? <div className="mt-4"><UnitCodeBanner code={data.unitCode} compact /></div> : null}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {cards.map((card) => {

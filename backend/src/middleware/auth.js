@@ -1,5 +1,6 @@
 import { User, Tenant } from '../models/index.js';
 import { verifyAccessToken } from '../utils/tokens.js';
+import { cacheWrap } from '../utils/cache.js';
 
 export async function authenticate(req, res, next) {
   try {
@@ -10,7 +11,11 @@ export async function authenticate(req, res, next) {
     }
 
     const payload = verifyAccessToken(token);
-    const user = await User.findById(payload.sub);
+    const user = await cacheWrap(
+      `user:${payload.sub}`,
+      20000,
+      () => User.findById(payload.sub)
+    );
     if (!user || !user.isActive) {
       return res.status(401).json({ message: 'Account is inactive or missing.' });
     }
@@ -52,7 +57,11 @@ export async function requireActiveTenant(req, res, next) {
     if (!tenantId) {
       return res.status(403).json({ message: 'No tenant is associated with this account.' });
     }
-    const tenant = await Tenant.findOne({ tenantId });
+    const tenant = await cacheWrap(
+      `tenant:${tenantId}`,
+      20000,
+      () => Tenant.findOne({ tenantId })
+    );
     if (!tenant) {
       return res.status(404).json({ message: 'Tenant not found.' });
     }
