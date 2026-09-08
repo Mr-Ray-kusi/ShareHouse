@@ -10,10 +10,6 @@ export function generateInviteCode(tenantName) {
   return `${prefix}-${rand}`;
 }
 
-export function generateFieldQrToken() {
-  return `FLD-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
-}
-
 export function isFieldQrCode(code) {
   return /^FLD-[0-9A-F]{12,}$/i.test(String(code || ''));
 }
@@ -26,20 +22,6 @@ export function generateInvitePassword() {
     out += alphabet[bytes[i] % alphabet.length];
   }
   return out;
-}
-
-export function generateUnitCode() {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let out = '';
-  const bytes = crypto.randomBytes(6);
-  for (let i = 0; i < 6; i += 1) {
-    out += alphabet[bytes[i] % alphabet.length];
-  }
-  return out;
-}
-
-export function normalizeUnitCode(value) {
-  return String(value || '').replace(/[\s-]+/g, '').toUpperCase();
 }
 
 export function addYears(date, years) {

@@ -204,7 +204,7 @@ export const restoreInvite = asyncHandler(async (req, res) => {
   const invite = await Invite.findOne({ _id: req.params.id, tenantId: req.tenantId });
   if (!invite) return res.status(404).json({ message: 'Invite not found.' });
   if (isFieldQrCode(invite.code)) {
-    return res.status(400).json({ message: 'This is a field QR code, not an assistant.' });
+    return res.status(400).json({ message: 'This invite cannot be managed as an assistant.' });
   }
 
   invite.isActive = true;
@@ -221,7 +221,7 @@ export const deleteInvite = asyncHandler(async (req, res) => {
   const invite = await Invite.findOne({ _id: req.params.id, tenantId: req.tenantId });
   if (!invite) return res.status(404).json({ message: 'Invite not found.' });
   if (isFieldQrCode(invite.code)) {
-    return res.status(400).json({ message: 'This is a field QR code, not an assistant.' });
+    return res.status(400).json({ message: 'This invite cannot be managed as an assistant.' });
   }
 
   if (invite.assistantId) {
@@ -234,7 +234,7 @@ export const deleteInvite = asyncHandler(async (req, res) => {
 export const getInvitePublic = asyncHandler(async (req, res) => {
   const code = String(req.params.code || '').toUpperCase().trim();
   if (isFieldQrCode(code)) {
-    return res.status(404).json({ message: 'Use the field collection page from the QR code, not the assistant join link.' });
+    return res.status(404).json({ message: 'This invite link is invalid or has been revoked.' });
   }
   let tenant = await Tenant.findOne({ joinCode: code });
   if (!tenant) tenant = await Tenant.findOne({ tenantId: String(req.params.code || '').toLowerCase() });

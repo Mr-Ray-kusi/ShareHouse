@@ -22,7 +22,6 @@ import Distributions from './pages/tenant/Distributions';
 import DistributionDetail from './pages/tenant/DistributionDetail';
 import Assistants from './pages/tenant/Assistants';
 import AssistantHome from './pages/assistant/AssistantHome';
-import FieldCollection from './pages/FieldCollection';
 
 function HomeRedirect() {
   const { user, loading } = useAuth();
@@ -41,7 +40,6 @@ export default function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/payment/callback" element={<PaymentCallback />} />
       <Route path="/join/:code" element={<JoinAssistant />} />
-      <Route path="/field/:token" element={<FieldCollection />} />
       <Route path="/go" element={<HomeRedirect />} />
 
       <Route

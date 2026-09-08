@@ -1,7 +1,5 @@
 import { Collection, Distribution, Tenant, User, Beneficiary } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { readUnitCode } from '../services/collectionUnit.js';
-
 export const tenantDashboard = asyncHandler(async (req, res) => {
   const dist =
     (req.query.distributionId
@@ -65,7 +63,6 @@ export const tenantDashboard = asyncHandler(async (req, res) => {
     stats,
     activity,
     headers: dist?.sheetHeaders || [],
-    unitCode: dist ? await readUnitCode(req.tenantId) : '',
     meta: { assistantCount, distributionCount },
   });
 });

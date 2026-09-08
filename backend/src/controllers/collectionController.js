@@ -2,7 +2,6 @@ import { Beneficiary, Collection, Distribution } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { foldSearch, searchRegex } from '../utils/search.js';
 import { track } from '../services/telemetry.js';
-import { ensureCollectionUnit, readUnitCode } from '../services/collectionUnit.js';
 
 async function resolveWorkingDistribution(req) {
   if (req.query.distributionId || req.body?.distributionId) {
@@ -40,16 +39,6 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
     ? dist.sheetHeaders
     : ['Student Index', 'Full Name', 'Level', 'Phone'];
 
-  let unitCode = await readUnitCode(req.tenantId);
-  if (!unitCode) {
-    const pack = await ensureCollectionUnit({
-      tenantId: req.tenantId,
-      distributionId: dist._id,
-      createdBy: req.user._id,
-    });
-    unitCode = pack.unitCode;
-  }
-
   const meta = {
     distribution: {
       id: dist._id,
@@ -59,7 +48,6 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
       beneficiaryCount: dist.beneficiaryCount,
     },
     headers,
-    unitCode,
   };
 
   if (req.query.meta === '1' || (!q && req.user.role === 'assistant')) {

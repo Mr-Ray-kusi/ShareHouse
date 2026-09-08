@@ -6,7 +6,6 @@ import SheetTable from '../../components/SheetTable';
 import ResultCards from '../../components/ResultCards';
 import SearchBar from '../../components/SearchBar';
 import HallHero from '../../components/HallHero';
-import UnitCodeBanner from '../../components/UnitCodeBanner';
 
 export default function AssistantHome() {
   const { tenant } = useAuth();
@@ -14,7 +13,6 @@ export default function AssistantHome() {
   const [list, setList] = useState([]);
   const [headers, setHeaders] = useState([]);
   const [distribution, setDistribution] = useState(null);
-  const [unitCode, setUnitCode] = useState('');
   const [flash, setFlash] = useState(null);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
@@ -26,7 +24,6 @@ export default function AssistantHome() {
     const { data } = await api.get('/api/collections/search', { params: { meta: 1 } });
     setDistribution(data.distribution);
     setHeaders(data.headers || []);
-    setUnitCode(data.unitCode || '');
   }
 
   useEffect(() => {
@@ -49,7 +46,6 @@ export default function AssistantHome() {
       setDistribution(data.distribution);
       setHeaders(data.headers || []);
       setList(data.results || []);
-      if (data.unitCode) setUnitCode(data.unitCode);
       setSearched(true);
     } catch (err) {
       if (seq !== searchSeq.current) return;
@@ -97,7 +93,7 @@ export default function AssistantHome() {
       <div className="shrink-0 space-y-2">
         <HallHero
           compact
-          eyebrow="Field collection"
+          eyebrow="Collection desk"
           title={tenant?.name || 'ShareHouse'}
           subtitle={
             distribution
@@ -105,7 +101,6 @@ export default function AssistantHome() {
               : 'No active distribution yet.'
           }
         />
-        <UnitCodeBanner code={unitCode} compact />
         {flash && (
           <div className="rounded-xl bg-forest-600 text-white px-3 py-2 flex items-center gap-2 text-sm">
             <CheckCircle2 size={16} /> {flash}
@@ -134,7 +129,7 @@ export default function AssistantHome() {
             ? 'Searching…'
             : searched
               ? (list.length ? `${list.length} match${list.length === 1 ? '' : 'es'}.` : 'No student matched that search.')
-              : 'Search the student in front of you. Give them the unit code if they scanned the QR.'}
+              : 'Search the student in front of you, then verify.'}
         </p>
       </div>
       <div className="flex-1 min-h-0 mt-2 overflow-y-auto md:overflow-hidden">
