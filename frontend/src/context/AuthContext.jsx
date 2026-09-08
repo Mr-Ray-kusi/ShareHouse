@@ -22,11 +22,25 @@ function writeCachedSession(user, tenant) {
   }
 }
 
+function isAccessTokenFresh() {
+  const token = getAccessToken();
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return Number(payload.exp) * 1000 > Date.now() + 15_000;
+  } catch {
+    return false;
+  }
+}
+
 export function AuthProvider({ children }) {
   const cached = readCachedSession();
   const [user, setUser] = useState(cached.user);
   const [tenant, setTenant] = useState(cached.tenant);
-  const [loading, setLoading] = useState(!cached.user);
+  const [loading, setLoading] = useState(() => {
+    if (cached.user && isAccessTokenFresh()) return false;
+    return Boolean(cached.user || getAccessToken());
+  });
 
   function applySession(data) {
     if (data?.accessToken) setAccessToken(data.accessToken);
@@ -37,7 +51,18 @@ export function AuthProvider({ children }) {
 
   async function bootstrap() {
     try {
-      if (!getAccessToken()) {
+      if (cached.user && isAccessTokenFresh()) {
+        setLoading(false);
+        api.get('/api/auth/me')
+          .then(({ data }) => {
+            setUser(data.user);
+            setTenant(data.tenant);
+            writeCachedSession(data.user, data.tenant);
+          })
+          .catch(() => {});
+        return;
+      }
+      if (!isAccessTokenFresh()) {
         const { data } = await api.post('/api/auth/refresh');
         applySession(data);
         if (data?.user) {

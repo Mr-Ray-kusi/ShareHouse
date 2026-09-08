@@ -7,6 +7,8 @@ export default function AuthScreen({ children }) {
       <img
         src="/hero-queue.png"
         alt=""
+        decoding="async"
+        fetchPriority="low"
         className="absolute inset-0 h-full w-full object-cover object-[center_28%]"
       />
       <div className="absolute inset-0 bg-ink/55" />

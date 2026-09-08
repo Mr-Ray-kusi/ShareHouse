@@ -33,9 +33,17 @@ export function track(event) {
   }).catch(() => {});
 }
 
+const SKIP_TELEMETRY = [
+  '/api/health',
+  '/api/telemetry',
+  '/api/collections/search',
+  '/api/collections/mark',
+  '/api/dashboard',
+];
+
 export function telemetryMiddleware(req, res, next) {
   const path = req.path || '';
-  if (!path.startsWith('/api') || path === '/api/health' || path.startsWith('/api/telemetry')) {
+  if (!path.startsWith('/api') || SKIP_TELEMETRY.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
     return next();
   }
   const started = Date.now();

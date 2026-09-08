@@ -12,7 +12,7 @@ import routes from './routes/index.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { telemetryMiddleware } from './services/telemetry.js';
 import { ensureSuperAdmin } from './scripts/seedSuperAdmin.js';
-import { Invite } from './models/index.js';
+import { getSb } from './db/supabase.js';
 import { verifyAccessToken } from './utils/tokens.js';
 
 const app = express();
@@ -93,15 +93,15 @@ app.use(errorHandler);
 
 async function start() {
   await connectDb();
-  try {
-    await Invite.syncIndexes();
-  } catch (err) {
-    console.warn('Could not sync invite indexes:', err.message);
-  }
-  await ensureSuperAdmin();
   server.listen(env.port, () => {
     console.log(`ShareHouse API on port ${env.port}`);
   });
+  ensureSuperAdmin().catch((err) => {
+    console.error('Super admin seed failed', err.message);
+  });
+  setInterval(() => {
+    getSb().from('tenants').select('id').limit(1).then(() => {}).catch(() => {});
+  }, 4 * 60 * 1000);
 }
 
 start().catch((err) => {

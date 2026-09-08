@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Printer } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api, { getAccessToken } from '../../api/client';
@@ -45,6 +45,8 @@ export default function TenantDashboard() {
   const [view, setView] = useState(null);
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState('asc');
+  const [listLoading, setListLoading] = useState(false);
+  const listRequested = useRef(false);
 
   async function loadDesk() {
     const { data: d } = await api.get('/api/dashboard');
@@ -53,15 +55,30 @@ export default function TenantDashboard() {
   }
 
   async function loadList() {
-    const { data: d } = await api.get('/api/collections/search');
-    setList(d.results || []);
-    setHeaders(d.headers || []);
+    if (listRequested.current) return;
+    listRequested.current = true;
+    setListLoading(true);
+    try {
+      const { data: d } = await api.get('/api/collections/search');
+      setList(d.results || []);
+      setHeaders(d.headers || []);
+    } catch (err) {
+      listRequested.current = false;
+      throw err;
+    } finally {
+      setListLoading(false);
+    }
   }
 
   useEffect(() => {
     loadDesk().catch((err) => setError(err.response?.data?.message || 'Could not load desk.'));
-    loadList().catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (view && view !== 'complete') {
+      loadList().catch(() => {});
+    }
+  }, [view]);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -190,17 +207,21 @@ export default function TenantDashboard() {
           </div>
 
           <div className="mt-3">
-            <SheetTable
-              headers={headers}
-              rows={visible}
-              sortKey={sortKey}
-              sortDir={sortDir}
-              onSort={(key, dir) => {
-                setSortKey(key);
-                setSortDir(dir);
-              }}
-              emptyMessage={needle ? 'No student matched that search.' : VIEWS[view].empty}
-            />
+            {listLoading && view !== 'complete' ? (
+              <p className="text-sm text-ink/55 py-6">Loading this list…</p>
+            ) : (
+              <SheetTable
+                headers={headers}
+                rows={visible}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={(key, dir) => {
+                  setSortKey(key);
+                  setSortDir(dir);
+                }}
+                emptyMessage={needle ? 'No student matched that search.' : VIEWS[view].empty}
+              />
+            )}
           </div>
         </section>
       )}

@@ -13,7 +13,7 @@ export async function authenticate(req, res, next) {
     const payload = verifyAccessToken(token);
     const user = await cacheWrap(
       `user:${payload.sub}`,
-      20000,
+      90000,
       () => User.findById(payload.sub)
     );
     if (!user || !user.isActive) {
@@ -59,7 +59,7 @@ export async function requireActiveTenant(req, res, next) {
     }
     const tenant = await cacheWrap(
       `tenant:${tenantId}`,
-      20000,
+      90000,
       () => Tenant.findOne({ tenantId })
     );
     if (!tenant) {

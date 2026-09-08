@@ -14,6 +14,12 @@ export function searchRegex(value) {
   return new RegExp(spaced, 'i');
 }
 
+export function looksLikeStudentIndex(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed || /\s/.test(trimmed) || !/\d/.test(trimmed)) return false;
+  return /^[A-Za-z0-9][A-Za-z0-9./-]{2,24}$/.test(trimmed);
+}
+
 export function namesMatch(entered, stored) {
   const a = foldSearch(entered);
   const b = foldSearch(stored);

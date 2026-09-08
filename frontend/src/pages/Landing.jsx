@@ -57,6 +57,8 @@ export default function Landing() {
           <img
             src="/hero-queue.png"
             alt="Students queuing for a hall welfare share while an assistant sits and hands out items"
+            decoding="async"
+            fetchPriority="high"
             className="absolute inset-0 h-full w-full object-cover object-[center_28%]"
           />
           <div className="absolute inset-0 bg-ink/45" />

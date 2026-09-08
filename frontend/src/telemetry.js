@@ -1,7 +1,12 @@
 import api from './api/client';
 
 export function emitTelemetry(payload) {
-  api.post('/api/telemetry', payload).catch(() => {});
+  const send = () => api.post('/api/telemetry', payload).catch(() => {});
+  if (typeof window !== 'undefined' && window.requestIdleCallback) {
+    window.requestIdleCallback(send, { timeout: 2500 });
+    return;
+  }
+  window.setTimeout(send, 0);
 }
 
 export function startWebVitals() {

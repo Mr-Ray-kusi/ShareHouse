@@ -1,9 +1,14 @@
 import { Distribution, Beneficiary, Collection, SheetUpload } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { parseBeneficiaryWorkbook } from '../services/excelService.js';
-import { searchRegex } from '../utils/search.js';
+import { looksLikeStudentIndex, searchRegex } from '../utils/search.js';
 import { saveUploadBuffer } from '../utils/uploads.js';
 import { track } from '../services/telemetry.js';
+import {
+  forgetActiveDistribution,
+  getActiveDistribution as loadActiveDistribution,
+  rememberActiveDistribution,
+} from '../services/activeDistribution.js';
 
 export const listDistributions = asyncHandler(async (req, res) => {
   const items = await Distribution.find({ tenantId: req.tenantId }).sort({ createdAt: -1 });
@@ -68,6 +73,8 @@ export const setDistributionStatus = asyncHandler(async (req, res) => {
 
   dist.status = status;
   await dist.save();
+  forgetActiveDistribution(req.tenantId);
+  if (status === 'active') rememberActiveDistribution(req.tenantId, dist);
   res.json({ distribution: dist });
 });
 
@@ -106,6 +113,8 @@ export const uploadBeneficiaries = asyncHandler(async (req, res) => {
     dist.status = 'active';
   }
   await dist.save();
+  forgetActiveDistribution(req.tenantId);
+  if (dist.status === 'active') rememberActiveDistribution(req.tenantId, dist);
 
   await SheetUpload.create({
     tenantId: req.tenantId,
@@ -139,23 +148,21 @@ export const listBeneficiaries = asyncHandler(async (req, res) => {
   const q = String(req.query.q || '').trim();
   const filter = { tenantId: req.tenantId, distributionId: dist._id };
   if (q) {
-    const rx = searchRegex(q);
-    filter.$or = [
-      { studentIndex: rx },
-      { fullName: rx },
-      { phone: rx },
-      { level: rx },
-      { searchText: rx },
-    ];
+    if (looksLikeStudentIndex(q)) {
+      filter.studentIndex = { $startsWith: q.trim() };
+    } else {
+      filter.searchText = searchRegex(q);
+    }
   }
 
-  const [items, received] = await Promise.all([
-    Beneficiary.find(filter).sort({ fullName: 1 }).limit(500),
-    Collection.find({
+  const items = await Beneficiary.find(filter).sort({ fullName: 1 }).limit(500);
+  const received = items.length
+    ? await Collection.find({
       tenantId: req.tenantId,
       distributionId: dist._id,
-    }).select('beneficiaryId collectedAt assistantName'),
-  ]);
+      beneficiaryId: { $in: items.map((b) => b._id) },
+    }).select('beneficiaryId collectedAt assistantName')
+    : [];
 
   const receivedMap = new Map(received.map((c) => [String(c.beneficiaryId), c]));
   const beneficiaries = items.map((b) => {
@@ -187,6 +194,6 @@ export const listBeneficiaries = asyncHandler(async (req, res) => {
 });
 
 export const getActiveDistribution = asyncHandler(async (req, res) => {
-  const dist = await Distribution.findOne({ tenantId: req.tenantId, status: 'active' });
+  const dist = await loadActiveDistribution(req.tenantId);
   res.json({ distribution: dist });
 });

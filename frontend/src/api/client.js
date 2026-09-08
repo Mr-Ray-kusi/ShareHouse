@@ -4,6 +4,7 @@ import { apiOrigin } from './baseUrl';
 const api = axios.create({
   baseURL: apiOrigin(),
   withCredentials: true,
+  timeout: 20000,
 });
 
 let accessToken = sessionStorage.getItem('ws_access') || null;
@@ -49,6 +50,19 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+function keepApiWarm() {
+  const hit = () => {
+    const origin = apiOrigin();
+    fetch(`${origin}/api/health`, { cache: 'no-store' }).catch(() => {});
+  };
+  hit();
+  window.setInterval(hit, 4 * 60 * 1000);
+}
+
+if (typeof window !== 'undefined') {
+  keepApiWarm();
+}
 
 export default api;
 

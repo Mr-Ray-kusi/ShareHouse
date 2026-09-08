@@ -22,11 +22,18 @@ function toIso(value) {
 
 function regexToIlike(rx) {
   const src = rx instanceof RegExp ? rx.source : String(rx);
+  const anchoredStart = src.startsWith('^');
+  const anchoredEnd = src.endsWith('$') && !src.endsWith('\\$');
   const safe = src
+    .replace(/^\^/, '')
+    .replace(/\$$/, '')
     .replace(/\\s\+/g, '%')
     .replace(/\\[.*+?^${}()|[\]\\]/g, '')
     .replace(/[%_,.()]/g, '')
     .replace(/\s+/g, '%');
+  if (anchoredStart && anchoredEnd) return safe;
+  if (anchoredStart) return `${safe}%`;
+  if (anchoredEnd) return `%${safe}`;
   return `%${safe}%`;
 }
 
@@ -37,7 +44,7 @@ function isPlainOp(value) {
     && !(value instanceof Date)
     && !(value instanceof RegExp)
     && !Array.isArray(value)
-    && ('$in' in value || '$ne' in value || '$gte' in value || '$gt' in value || '$lte' in value || '$lt' in value)
+    && ('$in' in value || '$ne' in value || '$gte' in value || '$gt' in value || '$lte' in value || '$lt' in value || '$startsWith' in value)
   );
 }
 
@@ -105,6 +112,10 @@ function applySimpleFilters(query, filter) {
       if (val.$gt !== undefined) q = q.gt(col, toIso(val.$gt));
       if (val.$lte !== undefined) q = q.lte(col, toIso(val.$lte));
       if (val.$lt !== undefined) q = q.lt(col, toIso(val.$lt));
+      if (val.$startsWith !== undefined) {
+        const raw = String(val.$startsWith).replace(/[%_]/g, '');
+        q = q.ilike(col, `${raw}%`);
+      }
       continue;
     }
     q = q.eq(col, key === '_id' || col === 'id' ? asId(val) : val);

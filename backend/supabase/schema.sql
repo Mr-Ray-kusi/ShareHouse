@@ -86,6 +86,9 @@ create table if not exists public.beneficiaries (
 );
 
 create index if not exists beneficiaries_search_idx on public.beneficiaries ("tenantId", "distributionId", "searchText");
+create extension if not exists pg_trgm;
+create index if not exists beneficiaries_search_trgm_idx
+  on public.beneficiaries using gin ("searchText" gin_trgm_ops);
 
 create table if not exists public.collections (
   id uuid primary key default gen_random_uuid(),
@@ -105,6 +108,8 @@ create table if not exists public.collections (
 create index if not exists collections_tenant_collected_idx on public.collections ("tenantId", "collectedAt" desc);
 create index if not exists collections_tenant_dist_collected_idx
   on public.collections ("tenantId", "distributionId", "collectedAt" desc);
+create index if not exists collections_assistant_idx
+  on public.collections ("tenantId", "assistantId", "collectedAt" desc);
 
 create table if not exists public.invites (
   id uuid primary key default gen_random_uuid(),

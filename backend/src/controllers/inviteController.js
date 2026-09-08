@@ -3,6 +3,7 @@ import { Invite, User, Tenant, Collection, Distribution, Beneficiary } from '../
 import { generateInviteCode, generateInvitePassword, isFieldQrCode } from '../utils/codes.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { env } from '../config/env.js';
+import { getActiveDistribution } from '../services/activeDistribution.js';
 
 export async function ensureJoinCode(tenant) {
   if (tenant.joinCode) return tenant.joinCode;
@@ -134,7 +135,7 @@ export const listAssistantCollections = asyncHandler(async (req, res) => {
   if (!invite) return res.status(404).json({ message: 'Assistant not found.' });
 
   const dist =
-    (await Distribution.findOne({ tenantId: req.tenantId, status: 'active' })) ||
+    (await getActiveDistribution(req.tenantId)) ||
     (await Distribution.findOne({ tenantId: req.tenantId }).sort({ createdAt: -1 }));
 
   if (!invite.assistantId && !invite.assistantName) {
@@ -151,7 +152,7 @@ export const listAssistantCollections = asyncHandler(async (req, res) => {
   if (invite.assistantId) filter.assistantId = invite.assistantId;
   else filter.assistantName = invite.assistantName;
 
-  const marks = await Collection.find(filter).sort({ collectedAt: -1 }).lean();
+  const marks = await Collection.find(filter).sort({ collectedAt: -1 }).limit(400).lean();
   const beneficiaries = await Beneficiary.find({
     _id: { $in: marks.map((m) => m.beneficiaryId) },
   }).select('sheetRow studentIndex fullName level phone');
