@@ -1,0 +1,17 @@
+{
+  "name": "ShareHouse collection desk",
+  "short_name": "ShareHouse",
+  "start_url": "/collect",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f1e7",
+  "theme_color": "#0b5d3b",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

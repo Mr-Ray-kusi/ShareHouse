@@ -51,6 +51,10 @@ body {
   @apply btn border border-forest-200 bg-white text-forest-800 hover:bg-forest-50;
 }
 
+.btn-danger {
+  @apply btn bg-red-700 text-white hover:bg-red-800;
+}
+
 .input {
   @apply w-full rounded-xl border border-forest-200 bg-white px-3.5 py-2.5 text-base outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-100;
 }
@@ -74,7 +78,8 @@ body {
   .btn,
   .btn-primary,
   .btn-ghost,
-  .btn-gold {
+  .btn-gold,
+  .btn-danger {
     display: none !important;
   }
 }

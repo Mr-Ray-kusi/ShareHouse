@@ -8,10 +8,13 @@ import SheetTable from '../../components/SheetTable';
 import SearchBar, { ColumnFilters, applyFilters, rowMatchesQuery } from '../../components/SearchBar';
 import { downloadCsv, printSheet, sortSheetRows } from '../../utils/sheetExport';
 import HallHero from '../../components/HallHero';
+import VoidMarkModal from '../../components/VoidMarkModal';
+import ExceptionPanel, { reviewWalkIn } from '../../components/ExceptionPanel';
 
 function activityRow(item) {
   return {
     id: item.id || item._id,
+    beneficiaryId: item.beneficiaryId || item.id,
     studentIndex: item.studentIndex,
     fullName: item.beneficiaryName || item.fullName,
     collected: true,
@@ -46,6 +49,10 @@ export default function TenantDashboard() {
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState('asc');
   const [listLoading, setListLoading] = useState(false);
+  const [voidRow, setVoidRow] = useState(null);
+  const [voidBusy, setVoidBusy] = useState(false);
+  const [exceptions, setExceptions] = useState([]);
+  const [exceptionBusy, setExceptionBusy] = useState('');
   const listRequested = useRef(false);
 
   async function loadDesk() {
@@ -70,8 +77,18 @@ export default function TenantDashboard() {
     }
   }
 
+  async function loadExceptions() {
+    try {
+      const { data } = await api.get('/api/exceptions', { params: { status: 'pending' } });
+      setExceptions(data.exceptions || []);
+    } catch (_err) {
+      /* ignore */
+    }
+  }
+
   useEffect(() => {
     loadDesk().catch((err) => setError(err.response?.data?.message || 'Could not load desk.'));
+    loadExceptions();
   }, []);
 
   useEffect(() => {
@@ -102,6 +119,37 @@ export default function TenantDashboard() {
             : row
         )
       );
+    });
+    socket.on('collection:void', (payload) => {
+      setData((prev) => {
+        if (!prev) return prev;
+        const activity = (prev.activity || []).filter((a) => (
+          String(a.beneficiaryId || '') !== String(payload.beneficiaryId)
+          && String(a.id || a._id) !== String(payload.collectionId)
+        ));
+        return { ...prev, stats: payload.stats || prev.stats, activity };
+      });
+      setList((prev) =>
+        prev.map((row) =>
+          String(row.id) === String(payload.beneficiaryId) || row.studentIndex === payload.studentIndex
+            ? { ...row, collected: false, markedBy: null, collectedAt: null }
+            : row
+        )
+      );
+    });
+    socket.on('exception:new', (payload) => {
+      if (payload?.exception) {
+        setExceptions((prev) => [payload.exception, ...prev.filter((row) => row.id !== payload.exception.id)]);
+      }
+    });
+    socket.on('exception:updated', (payload) => {
+      if (!payload?.exception) return;
+      setExceptions((prev) => {
+        if (payload.exception.status === 'pending') {
+          return [payload.exception, ...prev.filter((row) => row.id !== payload.exception.id)];
+        }
+        return prev.filter((row) => row.id !== payload.exception.id);
+      });
     });
     return () => socket.disconnect();
   }, []);
@@ -142,6 +190,35 @@ export default function TenantDashboard() {
     else downloadCsv(`${fileBase}-${view || 'list'}.csv`, headers, visible);
   }
 
+  async function voidMark(reason) {
+    if (!voidRow) return;
+    setVoidBusy(true);
+    setError('');
+    try {
+      const beneficiaryId = voidRow.beneficiaryId || voidRow.id;
+      const { data } = await api.post('/api/collections/void', { beneficiaryId, reason });
+      setData((prev) => {
+        if (!prev) return prev;
+        const activity = (prev.activity || []).filter((a) => (
+          String(a.beneficiaryId || a.id) !== String(beneficiaryId)
+        ));
+        return { ...prev, stats: data.stats || prev.stats, activity };
+      });
+      setList((prev) =>
+        prev.map((row) =>
+          String(row.id) === String(beneficiaryId) || row.studentIndex === voidRow.studentIndex
+            ? { ...row, collected: false, markedBy: null, collectedAt: null }
+            : row
+        )
+      );
+      setVoidRow(null);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not void that mark.');
+    } finally {
+      setVoidBusy(false);
+    }
+  }
+
   return (
     <div>
       <HallHero
@@ -154,6 +231,45 @@ export default function TenantDashboard() {
         }
       />
       {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+
+      {exceptions.length > 0 && (
+        <section className="mt-6 card p-4">
+          <h2 className="font-display text-2xl">Walk-ins waiting</h2>
+          <p className="text-sm text-ink/60 mt-1">Approve from the live desk so the table can serve them.</p>
+          <div className="mt-3">
+            <ExceptionPanel
+              items={exceptions}
+              canReview
+              busyId={exceptionBusy}
+              onApprove={async (row, markReceived) => {
+                setExceptionBusy(row.id);
+                try {
+                  await reviewWalkIn(row.id, 'approve', { markReceived });
+                  await loadExceptions();
+                  await loadDesk();
+                  listRequested.current = false;
+                } catch (err) {
+                  setError(err.response?.data?.message || 'Could not approve that walk-in.');
+                } finally {
+                  setExceptionBusy('');
+                }
+              }}
+              onReject={async (row) => {
+                const note = window.prompt('Reason for rejecting this walk-in?', 'Not eligible') || 'Rejected';
+                setExceptionBusy(row.id);
+                try {
+                  await reviewWalkIn(row.id, 'reject', { note });
+                  await loadExceptions();
+                } catch (err) {
+                  setError(err.response?.data?.message || 'Could not reject that walk-in.');
+                } finally {
+                  setExceptionBusy('');
+                }
+              }}
+            />
+          </div>
+        </section>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-2">
         {cards.map((card) => {
@@ -219,12 +335,21 @@ export default function TenantDashboard() {
                   setSortKey(key);
                   setSortDir(dir);
                 }}
+                showVoid
+                onVoid={setVoidRow}
                 emptyMessage={needle ? 'No student matched that search.' : VIEWS[view].empty}
               />
             )}
           </div>
         </section>
       )}
+
+      <VoidMarkModal
+        row={voidRow}
+        busy={voidBusy}
+        onCancel={() => setVoidRow(null)}
+        onConfirm={voidMark}
+      />
     </div>
   );
 }

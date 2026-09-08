@@ -24,7 +24,11 @@ export default function ResultCards({
           <article
             key={id}
             className={`aspect-square rounded-2xl p-4 flex flex-col overflow-hidden ${
-              taken ? 'bg-red-600 text-white' : 'bg-white border border-forest-100 shadow-lift'
+              taken
+                ? 'bg-red-600 text-white'
+                : row.queued
+                  ? 'bg-gold-400 text-ink'
+                  : 'bg-white border border-forest-100 shadow-lift'
             }`}
           >
             <div className="min-h-0 flex-1 overflow-y-auto pr-1 space-y-1.5">
@@ -53,6 +57,8 @@ export default function ResultCards({
                     <span className="block text-xs font-normal text-white/80">{formatCollectedAt(row.collectedAt)}</span>
                   ) : null}
                 </p>
+              ) : row.queued ? (
+                <p className="text-sm font-semibold">Queued — will sync</p>
               ) : showMark ? (
                 <button
                   type="button"

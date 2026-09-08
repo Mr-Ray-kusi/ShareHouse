@@ -5,7 +5,10 @@ import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider } from './context/AuthContext';
 import Telemetry from './components/Telemetry.jsx';
 import App from './App.jsx';
+import { registerSharehouseWorker } from './offline/registerSw.js';
 import './index.css';
+
+registerSharehouseWorker();
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

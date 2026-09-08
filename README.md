@@ -37,7 +37,7 @@ Super admins **cannot** create distributions or mark beneficiaries, including in
 ## Local setup
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. In the dashboard SQL Editor, run `backend/supabase/schema.sql`.
+2. In the dashboard SQL Editor, run `backend/supabase/schema.sql`. Existing projects should also run `backend/supabase/share-day.sql` (safe list updates, mark voids, and walk-in requests).
 3. Copy env files and fill in the project URL plus the **service role** key (Settings → API). Never put that key in the frontend.
 
 ```bash

@@ -9,7 +9,11 @@ const upload = multer({
   fileFilter: (_req, file, cb) => {
     const ok = /\.(xlsx|xls|csv)$/i.test(file.originalname);
     if (ok) cb(null, true);
-    else cb(new Error('Only Excel files are allowed (.xlsx, .xls).'));
+    else {
+      const err = new Error('Only Excel files are allowed (.xlsx, .xls, .csv).');
+      err.status = 400;
+      cb(err);
+    }
   },
 });
 
@@ -22,6 +26,27 @@ router.get('/:id', requireRoles('tenant_admin', 'super_admin'), dist.getDistribu
 router.patch('/:id', requireRoles('tenant_admin'), dist.updateDistribution);
 router.patch('/:id/status', requireRoles('tenant_admin'), dist.setDistributionStatus);
 router.get('/:id/beneficiaries', requireRoles('tenant_admin', 'super_admin'), dist.listBeneficiaries);
+router.post(
+  '/:id/beneficiaries/preview',
+  requireRoles('tenant_admin'),
+  upload.single('file'),
+  dist.previewBeneficiariesUpload
+);
+router.post(
+  '/:id/beneficiaries/manual',
+  requireRoles('tenant_admin'),
+  dist.addBeneficiary
+);
+router.patch(
+  '/:id/beneficiaries/:beneficiaryId',
+  requireRoles('tenant_admin'),
+  dist.updateBeneficiary
+);
+router.delete(
+  '/:id/beneficiaries/:beneficiaryId',
+  requireRoles('tenant_admin'),
+  dist.removeBeneficiary
+);
 router.post(
   '/:id/beneficiaries',
   requireRoles('tenant_admin'),

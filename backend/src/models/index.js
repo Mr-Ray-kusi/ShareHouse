@@ -6,3 +6,5 @@ export { Collection } from './Collection.js';
 export { Invite } from './Invite.js';
 export { SheetUpload } from './SheetUpload.js';
 export { SystemEvent } from './SystemEvent.js';
+export { CollectionVoid } from './CollectionVoid.js';
+export { ListException } from './ListException.js';

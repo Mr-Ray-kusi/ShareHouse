@@ -1,11 +1,14 @@
-import { Beneficiary, Collection, Distribution } from '../models/index.js';
+import { Collection, CollectionVoid, Beneficiary, Distribution } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { foldSearch, looksLikeStudentIndex, searchRegex } from '../utils/search.js';
 import { track } from '../services/telemetry.js';
+import { getActiveDistribution } from '../services/activeDistribution.js';
+import { defaultHeaders, presentBeneficiary, statsFromDist } from '../services/listService.js';
 import {
-  bumpReceivedCount,
-  getActiveDistribution,
-} from '../services/activeDistribution.js';
+  createCollectionMark,
+  resolveActiveForBeneficiary,
+  voidCollectionMark,
+} from '../services/collectionService.js';
 
 async function resolveWorkingDistribution(req) {
   if (req.query.distributionId || req.body?.distributionId) {
@@ -34,10 +37,7 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
     }
   }
 
-  const headers = dist.sheetHeaders?.length
-    ? dist.sheetHeaders
-    : ['Student Index', 'Full Name', 'Level', 'Phone'];
-
+  const headers = dist.sheetHeaders?.length ? dist.sheetHeaders : defaultHeaders();
   const meta = {
     distribution: {
       id: dist._id,
@@ -47,6 +47,7 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
       beneficiaryCount: dist.beneficiaryCount,
     },
     headers,
+    offline: false,
   };
 
   if (req.query.meta === '1' || (!q && req.user.role === 'assistant')) {
@@ -55,7 +56,7 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
 
   const limit = q ? 24 : 2000;
   const items = await Beneficiary.find(filter)
-    .select('studentIndex fullName level phone sheetRow')
+    .select('studentIndex fullName level phone sheetRow searchText')
     .sort({ fullName: 1, studentIndex: 1 })
     .limit(limit);
   const marks = items.length
@@ -78,26 +79,7 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
         else if (foldSearch(b.studentIndex).startsWith(needle)) rank = 2;
         else if (hay.includes(needle)) rank = 1;
       }
-      return {
-        id: String(b._id),
-        studentIndex: b.studentIndex,
-        fullName: b.fullName,
-        level: b.level,
-        phone: b.phone,
-        sheetRow: b.sheetRow && Object.keys(b.sheetRow).length
-          ? b.sheetRow
-          : {
-            'Student Index': b.studentIndex,
-            'Full Name': b.fullName,
-            Level: b.level,
-            Phone: b.phone,
-          },
-        collected: Boolean(mark),
-        collectedAt: mark?.collectedAt || null,
-        markedBy: mark?.assistantName || null,
-        assistantId: mark?.assistantId ? String(mark.assistantId) : null,
-        rank,
-      };
+      return { ...presentBeneficiary(b, mark, headers), rank };
     })
     .sort((a, b) => (q ? b.rank - a.rank : 0) || a.fullName.localeCompare(b.fullName));
 
@@ -107,14 +89,57 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
   });
 });
 
-export const markReceived = asyncHandler(async (req, res) => {
-  if (req.user.role === 'super_admin') {
-    return res.status(403).json({ message: 'Super admins cannot mark beneficiaries.' });
+export const offlinePack = asyncHandler(async (req, res) => {
+  const dist = await getActiveDistribution(req.tenantId);
+  if (!dist) {
+    return res.status(404).json({ message: 'No active distribution. Ask the hall president to start one.' });
   }
 
-  const { beneficiaryId } = req.body || {};
+  const headers = dist.sheetHeaders?.length ? dist.sheetHeaders : defaultHeaders();
+  const items = await Beneficiary.find({
+    tenantId: req.tenantId,
+    distributionId: dist._id,
+  })
+    .select('studentIndex fullName level phone sheetRow searchText')
+    .sort({ fullName: 1, studentIndex: 1 })
+    .limit(8000);
+  const marks = items.length
+    ? await Collection.find({
+      tenantId: req.tenantId,
+      distributionId: dist._id,
+      beneficiaryId: { $in: items.map((b) => b._id) },
+    }).select('beneficiaryId collectedAt assistantName assistantId')
+    : [];
+  const markMap = new Map(marks.map((m) => [String(m.beneficiaryId), m]));
+
+  res.json({
+    fetchedAt: new Date().toISOString(),
+    tenantId: req.tenantId,
+    distribution: {
+      id: String(dist._id),
+      title: dist.title,
+      itemName: dist.itemName,
+      status: dist.status,
+      beneficiaryCount: dist.beneficiaryCount,
+      receivedCount: dist.receivedCount,
+    },
+    headers,
+    stats: statsFromDist(dist),
+    truncated: items.length >= 8000,
+    beneficiaries: items.map((b) => presentBeneficiary(b, markMap.get(String(b._id)), headers)),
+  });
+});
+
+async function markOne(req, beneficiaryId) {
+  if (req.user.role === 'super_admin') {
+    const err = new Error('Super admins cannot mark beneficiaries.');
+    err.status = 403;
+    throw err;
+  }
   if (!beneficiaryId) {
-    return res.status(400).json({ message: 'beneficiaryId is required.' });
+    const err = new Error('beneficiaryId is required.');
+    err.status = 400;
+    throw err;
   }
 
   const beneficiary = await Beneficiary.findOne({
@@ -122,81 +147,96 @@ export const markReceived = asyncHandler(async (req, res) => {
     tenantId: req.tenantId,
   });
   if (!beneficiary) {
-    return res.status(404).json({ message: 'Student not found on this hall list.' });
+    const err = new Error('Student not found on this hall list.');
+    err.status = 404;
+    throw err;
   }
 
-  let dist = await getActiveDistribution(req.tenantId);
-  const distId = String(beneficiary.distributionId);
-  if (!dist || String(dist._id) !== distId) {
-    dist = await Distribution.findOne({
-      _id: beneficiary.distributionId,
-      tenantId: req.tenantId,
-    });
-  }
-  if (!dist || dist.status !== 'active') {
-    return res.status(400).json({ message: 'This distribution is not active.' });
-  }
+  const dist = await resolveActiveForBeneficiary(req.tenantId, beneficiary);
+  const result = await createCollectionMark({
+    tenantId: req.tenantId,
+    user: req.user,
+    beneficiary,
+    dist,
+  });
+  const io = req.app.get('io');
+  io?.to(`tenant:${req.tenantId}`).emit('collection:new', result.payload);
+  track({ pillar: 'funnel', name: 'collection_mark', tenantId: req.tenantId || '', role: req.user?.role || '' });
+  return result;
+}
 
-  let collection;
+export const markReceived = asyncHandler(async (req, res) => {
   try {
-    collection = await Collection.create({
-      tenantId: req.tenantId,
-      distributionId: dist._id,
-      beneficiaryId: beneficiary._id,
-      assistantId: req.user._id,
-      studentIndex: beneficiary.studentIndex,
-      beneficiaryName: beneficiary.fullName,
-      assistantName: req.user.name,
-      collectedAt: new Date(),
-    });
+    const result = await markOne(req, req.body?.beneficiaryId);
+    res.status(201).json({ message: 'Marked as received.', ...result.payload });
   } catch (err) {
-    if (err.code === 11000) {
-      const dup = await Collection.findOne({
-        distributionId: dist._id,
-        beneficiaryId: beneficiary._id,
-      });
+    if (err.status === 409) {
       return res.status(409).json({
-        message: 'This student has already collected.',
-        collection: dup,
+        message: err.message,
+        collection: err.collection,
       });
     }
     throw err;
   }
+});
 
-  const updated = await bumpReceivedCount(dist);
+export const markReceivedBatch = asyncHandler(async (req, res) => {
+  const items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 50) : [];
+  if (!items.length) {
+    return res.status(400).json({ message: 'items is required.' });
+  }
 
-  const payload = {
-    collection: {
-      id: String(collection._id),
-      studentIndex: collection.studentIndex,
-      beneficiaryName: collection.beneficiaryName,
-      assistantName: collection.assistantName,
-      collectedAt: collection.collectedAt,
-      beneficiaryId: String(beneficiary._id),
-      sheetRow: beneficiary.sheetRow && Object.keys(beneficiary.sheetRow || {}).length
-        ? beneficiary.sheetRow
-        : {
-          'Student Index': beneficiary.studentIndex,
-          'Full Name': beneficiary.fullName,
-          Level: beneficiary.level,
-          Phone: beneficiary.phone,
-        },
-    },
-    stats: {
-      total: updated.beneficiaryCount,
-      received: updated.receivedCount,
-      pending: Math.max(0, updated.beneficiaryCount - updated.receivedCount),
-      percent: updated.beneficiaryCount
-        ? Math.round((updated.receivedCount / updated.beneficiaryCount) * 100)
-        : 0,
-    },
-  };
+  const results = [];
+  for (const item of items) {
+    const beneficiaryId = item?.beneficiaryId;
+    try {
+      const result = await markOne(req, beneficiaryId);
+      results.push({
+        beneficiaryId,
+        status: 'accepted',
+        collection: result.payload.collection,
+        stats: result.payload.stats,
+      });
+    } catch (err) {
+      results.push({
+        beneficiaryId,
+        status: err.status === 409 ? 'duplicate' : 'failed',
+        message: err.message,
+        collection: err.collection || null,
+      });
+    }
+  }
+
+  res.json({ results });
+});
+
+export const voidReceived = asyncHandler(async (req, res) => {
+  if (req.user.role !== 'tenant_admin') {
+    return res.status(403).json({ message: 'Only the hall admin can void a mark.' });
+  }
+  const reason = String(req.body?.reason || '').trim();
+  if (reason.length < 3) {
+    return res.status(400).json({ message: 'Give a short reason for voiding this mark.' });
+  }
+  if (!req.body?.beneficiaryId) {
+    return res.status(400).json({ message: 'beneficiaryId is required.' });
+  }
+
+  const result = await voidCollectionMark({
+    tenantId: req.tenantId,
+    user: req.user,
+    beneficiaryId: req.body.beneficiaryId,
+    reason,
+  });
 
   const io = req.app.get('io');
-  io?.to(`tenant:${req.tenantId}`).emit('collection:new', payload);
-  track({ pillar: 'funnel', name: 'collection_mark', tenantId: req.tenantId || '', role: req.user?.role || '' });
+  io?.to(`tenant:${req.tenantId}`).emit('collection:void', result.payload);
+  track({ pillar: 'funnel', name: 'collection_void', tenantId: req.tenantId || '' });
 
-  res.status(201).json({ message: 'Marked as received.', ...payload });
+  res.json({
+    message: `${result.beneficiary.fullName} was unmarked.`,
+    ...result.payload,
+  });
 });
 
 export const activityFeed = asyncHandler(async (req, res) => {
@@ -205,4 +245,12 @@ export const activityFeed = asyncHandler(async (req, res) => {
   if (dist) filter.distributionId = dist._id;
   const items = await Collection.find(filter).sort({ collectedAt: -1 }).limit(Number(req.query.limit) || 40);
   res.json({ activity: items, distribution: dist });
+});
+
+export const listVoids = asyncHandler(async (req, res) => {
+  const dist = await resolveWorkingDistribution(req);
+  const filter = { tenantId: req.tenantId };
+  if (dist) filter.distributionId = dist._id;
+  const items = await CollectionVoid.find(filter).sort({ createdAt: -1 }).limit(40);
+  res.json({ voids: items });
 });

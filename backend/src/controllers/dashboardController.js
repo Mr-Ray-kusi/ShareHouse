@@ -1,4 +1,4 @@
-import { Collection, Distribution, Tenant, User } from '../models/index.js';
+import { Collection, Distribution, Tenant, User, ListException } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { getActiveDistribution } from '../services/activeDistribution.js';
 
@@ -10,7 +10,7 @@ export const tenantDashboard = asyncHandler(async (req, res) => {
     (await getActiveDistribution(req.tenantId)) ||
     (await Distribution.findOne({ tenantId: req.tenantId }).sort({ createdAt: -1 }));
 
-  const [assistantCount, distributionCount, marks] = await Promise.all([
+  const [assistantCount, distributionCount, marks, pendingExceptions] = await Promise.all([
     User.countDocuments({ tenantId: req.tenantId, role: 'assistant', isActive: true }),
     Distribution.countDocuments({ tenantId: req.tenantId }),
     dist
@@ -22,6 +22,13 @@ export const tenantDashboard = asyncHandler(async (req, res) => {
         .limit(50)
         .lean()
       : Promise.resolve([]),
+    dist
+      ? ListException.countDocuments({
+        tenantId: req.tenantId,
+        distributionId: dist._id,
+        status: 'pending',
+      })
+      : Promise.resolve(0),
   ]);
 
   let activity = [];
@@ -31,6 +38,7 @@ export const tenantDashboard = asyncHandler(async (req, res) => {
     activity = marks.map((item) => ({
       ...item,
       id: String(item._id),
+      beneficiaryId: item.beneficiaryId ? String(item.beneficiaryId) : null,
       collected: true,
       markedBy: item.assistantName,
       sheetRow: {
@@ -55,6 +63,7 @@ export const tenantDashboard = asyncHandler(async (req, res) => {
     stats,
     activity,
     headers: dist?.sheetHeaders || [],
+    pendingExceptions,
     meta: { assistantCount, distributionCount },
   });
 });

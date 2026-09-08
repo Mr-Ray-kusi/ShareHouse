@@ -4,8 +4,11 @@ export default function SheetTable({
   headers = [],
   rows = [],
   onMark,
+  onVoid,
+  onEdit,
   busyId,
   showMark = false,
+  showVoid = false,
   extraColumns = [],
   emptyMessage,
   fillHeight = false,
@@ -49,14 +52,14 @@ export default function SheetTable({
               <th key={col.header} className="px-3 py-3 whitespace-nowrap">{col.header}</th>
             ))}
             <th className="px-3 py-3 whitespace-nowrap">{mark('__status', 'Status')}</th>
-            {showMark && <th className="px-3 py-3"></th>}
+            {(showMark || showVoid || onEdit) && <th className="px-3 py-3"></th>}
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => {
             const sheet = row.sheetRow || {};
             return (
-              <tr key={row.id || row._id} className={`border-b border-forest-50 ${row.collected ? 'bg-red-50/40' : 'bg-white'}`}>
+              <tr key={row.id || row._id} className={`border-b border-forest-50 ${row.collected ? 'bg-red-50/40' : row.queued ? 'bg-gold-400/15' : 'bg-white'}`}>
                 {cols.map((h) => (
                   <td key={h} className="px-3 py-2 whitespace-nowrap">
                     {sheet[h] || '—'}
@@ -75,21 +78,44 @@ export default function SheetTable({
                         <span className="block font-normal text-ink/65">{formatCollectedAt(row.collectedAt)}</span>
                       ) : null}
                     </span>
+                  ) : row.queued ? (
+                    <span className="text-xs font-semibold text-amber-800">Queued to sync</span>
                   ) : (
                     <span className="text-xs font-semibold text-forest-700">Pending</span>
                   )}
                 </td>
-                {showMark && (
+                {(showMark || showVoid || onEdit) && (
                   <td className="px-3 py-2">
-                    {!row.collected && (
-                      <button
-                        className="btn-primary text-xs py-1.5 px-3"
-                        disabled={busyId === (row.id || row._id)}
-                        onClick={() => onMark?.(row)}
-                      >
-                        {busyId === (row.id || row._id) ? 'Saving…' : 'Verify'}
-                      </button>
-                    )}
+                    <div className="flex flex-wrap gap-1.5">
+                      {showMark && !row.collected && (
+                        <button
+                          className="btn-primary text-xs py-1.5 px-3"
+                          disabled={busyId === (row.id || row._id)}
+                          onClick={() => onMark?.(row)}
+                        >
+                          {busyId === (row.id || row._id) ? 'Saving…' : 'Verify'}
+                        </button>
+                      )}
+                      {showVoid && row.collected && (
+                        <button
+                          type="button"
+                          className="btn-ghost text-xs py-1.5 px-3"
+                          disabled={busyId === (row.id || row._id || row.beneficiaryId)}
+                          onClick={() => onVoid?.(row)}
+                        >
+                          Void
+                        </button>
+                      )}
+                      {onEdit && (
+                        <button
+                          type="button"
+                          className="btn-ghost text-xs py-1.5 px-3"
+                          onClick={() => onEdit?.(row)}
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>
