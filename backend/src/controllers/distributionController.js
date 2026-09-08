@@ -14,7 +14,6 @@ import {
   beneficiaryPayload,
   defaultHeaders,
   findDuplicateIndex,
-  mergeHeaders,
   presentBeneficiary,
   previewListUpload,
   refreshDistributionCounts,
@@ -216,7 +215,7 @@ export const uploadBeneficiaries = asyncHandler(async (req, res) => {
 
 export const addBeneficiary = asyncHandler(async (req, res) => {
   const dist = await requireDistribution(req);
-  const headers = mergeHeaders(dist.sheetHeaders, defaultHeaders());
+  const headers = dist.sheetHeaders?.length ? dist.sheetHeaders : defaultHeaders();
   const payload = beneficiaryPayload(req.body || {}, headers);
   if (!payload.fullName) {
     return res.status(400).json({ message: 'Full name is required.' });
@@ -256,7 +255,7 @@ export const updateBeneficiary = asyncHandler(async (req, res) => {
   });
   if (!beneficiary) return res.status(404).json({ message: 'Student not found on this list.' });
 
-  const headers = mergeHeaders(dist.sheetHeaders, defaultHeaders());
+  const headers = dist.sheetHeaders?.length ? dist.sheetHeaders : defaultHeaders();
   const next = beneficiaryPayload({
     studentIndex: req.body?.studentIndex ?? beneficiary.studentIndex,
     fullName: req.body?.fullName ?? beneficiary.fullName,

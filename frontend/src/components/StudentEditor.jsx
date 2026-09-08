@@ -1,63 +1,74 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Modal from './Modal';
+import {
+  classifySheetHeaders,
+  defaultSheetHeaders,
+  fieldsFromSheetValues,
+  requiredSheetHeaders,
+} from '../utils/sheetColumns';
 
-const empty = { studentIndex: '', fullName: '', level: '', phone: '' };
+function initialValues(student, headers) {
+  const sheet = student?.sheetRow || {};
+  const roles = classifySheetHeaders(headers);
+  const values = {};
+  for (const header of headers) {
+    values[header] = sheet[header] ?? '';
+  }
+  if (roles.index && !values[roles.index] && student?.studentIndex) {
+    values[roles.index] = student.studentIndex;
+  }
+  if (roles.name && !values[roles.name] && student?.fullName) {
+    values[roles.name] = student.fullName;
+  }
+  if (roles.level && !values[roles.level] && student?.level) {
+    values[roles.level] = student.level;
+  }
+  if (roles.phone && !values[roles.phone] && student?.phone) {
+    values[roles.phone] = student.phone;
+  }
+  return values;
+}
 
-export default function StudentEditor({ student, busy, onClose, onSave }) {
-  const [form, setForm] = useState(() => ({
-    studentIndex: student?.studentIndex || '',
-    fullName: student?.fullName || '',
-    level: student?.level || '',
-    phone: student?.phone || '',
-  }));
+export default function StudentEditor({ student, headers = [], busy, onClose, onSave }) {
+  const cols = headers.length ? headers : defaultSheetHeaders();
+  const required = useMemo(() => requiredSheetHeaders(cols), [cols]);
+  const [values, setValues] = useState(() => initialValues(student, cols));
   const editing = Boolean(student?.id);
 
-  function set(key, value) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  function set(header, value) {
+    setValues((prev) => ({ ...prev, [header]: value }));
   }
 
   return (
-    <Modal title={editing ? 'Edit student' : 'Add student'} onClose={busy ? undefined : onClose}>
+    <Modal title={editing ? 'Edit student' : 'Add student'} onClose={busy ? undefined : onClose} wide>
+      <p className="text-sm text-ink/70">
+        {headers.length
+          ? 'These fields match the columns from the uploaded Excel sheet.'
+          : 'Upload an Excel list first if you want this form to follow your sheet columns.'}
+      </p>
       {editing && student.collected ? (
-        <p className="mb-3 rounded-xl bg-gold-400/20 px-3 py-2 text-sm">
+        <p className="mt-3 rounded-xl bg-gold-400/20 px-3 py-2 text-sm">
           This student already collected. A spelling or ID fix keeps that mark.
         </p>
       ) : null}
       <form
-        className="space-y-3"
+        className="mt-4 space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          onSave({ ...empty, ...form });
+          onSave(fieldsFromSheetValues(values, cols));
         }}
       >
-        <div>
-          <label className="label">Student index</label>
-          <input
-            className="input"
-            value={form.studentIndex}
-            onChange={(e) => set('studentIndex', e.target.value)}
-            required
-          />
-        </div>
-        <div>
-          <label className="label">Full name</label>
-          <input
-            className="input"
-            value={form.fullName}
-            onChange={(e) => set('fullName', e.target.value)}
-            required
-          />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className="label">Level</label>
-            <input className="input" value={form.level} onChange={(e) => set('level', e.target.value)} />
+        {cols.map((header) => (
+          <div key={header}>
+            <label className="label">{header}</label>
+            <input
+              className="input"
+              value={values[header] || ''}
+              onChange={(e) => set(header, e.target.value)}
+              required={required.has(header)}
+            />
           </div>
-          <div>
-            <label className="label">Phone</label>
-            <input className="input" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
-          </div>
-        </div>
+        ))}
         <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
           <button type="button" className="btn-ghost" disabled={busy} onClick={onClose}>
             Cancel

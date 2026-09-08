@@ -9,6 +9,7 @@ import HallHero from '../../components/HallHero';
 import ConfirmMarkModal from '../../components/ConfirmMarkModal';
 import ExceptionPanel from '../../components/ExceptionPanel';
 import Modal from '../../components/Modal';
+import CameraCapture from '../../components/CameraCapture';
 import {
   applyMarkToPack,
   enqueueException,
@@ -291,7 +292,7 @@ export default function AssistantHome() {
               : 'Search the student in front of you, then confirm before you verify.'}
         </p>
         {searched ? (
-          <button type="button" className="btn-ghost text-xs" onClick={() => setWalkInOpen(true)}>
+          <button type="button" className="btn-ghost text-xs" onClick={() => { setWalkInPhoto(null); setWalkInOpen(true); }}>
             Not on the list? Request a walk-in
           </button>
         ) : null}
@@ -344,7 +345,7 @@ export default function AssistantHome() {
       />
 
       {walkInOpen ? (
-        <Modal title="Walk-in request" onClose={walkBusy ? undefined : () => setWalkInOpen(false)}>
+        <Modal title="Walk-in request" onClose={walkBusy ? undefined : () => { setWalkInOpen(false); setWalkInPhoto(null); }}>
           <p className="text-sm text-ink/70">
             Do not give the item until the hall admin approves this request.
           </p>
@@ -371,17 +372,13 @@ export default function AssistantHome() {
               <label className="label">Why are they not on the list?</label>
               <textarea className="input min-h-[88px]" value={walkIn.reason} onChange={(e) => setWalkIn((p) => ({ ...p, reason: e.target.value }))} required />
             </div>
-            <div>
-              <label className="label">Photo (optional)</label>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={(e) => setWalkInPhoto(e.target.files?.[0] || null)}
-              />
-            </div>
+            <CameraCapture
+              value={walkInPhoto}
+              onChange={setWalkInPhoto}
+              label="Photo (optional)"
+            />
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button type="button" className="btn-ghost" disabled={walkBusy} onClick={() => setWalkInOpen(false)}>Cancel</button>
+              <button type="button" className="btn-ghost" disabled={walkBusy} onClick={() => { setWalkInOpen(false); setWalkInPhoto(null); }}>Cancel</button>
               <button type="submit" className="btn-primary" disabled={walkBusy}>{walkBusy ? 'Sending…' : 'Send for approval'}</button>
             </div>
           </form>

@@ -26,6 +26,89 @@ export function defaultHeaders() {
   return ['Student Index', 'Full Name', 'Level', 'Phone'];
 }
 
+function normalizeHeader(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[\n\r]+/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const HEADER_HINTS = {
+  index: [
+    'student index', 'index number', 'index no', 'indexno', 'index',
+    'matric', 'matric no', 'matriculation', 'student id', 'studentid',
+    'student no', 'student number', 'reg no', 'reg number', 'registration',
+    'admission', 'candidate', 'ref no', 'reference', 'id number', 'id no',
+  ],
+  firstName: ['first name', 'firstname', 'given name', 'forename'],
+  lastName: ['last name', 'lastname', 'surname', 'family name'],
+  otherName: ['other name', 'other names', 'middle name', 'middle names'],
+  name: ['full name', 'fullname', 'student name', 'beneficiary', 'name of student', 'names'],
+  level: ['level', 'year', 'class', 'lvl', 'programme year', 'academic year'],
+  phone: [
+    'phone', 'phone number', 'mobile', 'mobile number', 'contact', 'contact number',
+    'tel', 'telephone', 'whatsapp', 'cell', 'msisdn',
+  ],
+};
+
+function headerScore(header, hints) {
+  const h = normalizeHeader(header);
+  if (!h) return 0;
+  let best = 0;
+  for (const hint of hints) {
+    if (h === hint) best = Math.max(best, 100);
+    else if (h.includes(hint) || hint.includes(h)) best = Math.max(best, 75);
+  }
+  return best;
+}
+
+export function classifySheetHeaders(headers = []) {
+  const cols = (headers || []).filter(Boolean);
+  const used = new Set();
+  function pick(hints, min = 40) {
+    let best = { header: '', score: 0 };
+    for (const header of cols) {
+      if (used.has(header)) continue;
+      const score = headerScore(header, hints);
+      if (score > best.score) best = { header, score };
+    }
+    if (best.score >= min) {
+      used.add(best.header);
+      return best.header;
+    }
+    return '';
+  }
+
+  const roles = {
+    index: pick(HEADER_HINTS.index),
+    lastName: pick(HEADER_HINTS.lastName),
+    firstName: pick(HEADER_HINTS.firstName),
+    otherName: pick(HEADER_HINTS.otherName),
+    name: pick(HEADER_HINTS.name),
+    phone: pick(HEADER_HINTS.phone),
+    level: pick(HEADER_HINTS.level),
+  };
+  if (!roles.index && cols[0]) {
+    roles.index = cols[0];
+    used.add(cols[0]);
+  }
+  return roles;
+}
+
+export function composeFullName(sheetRow = {}, roles = {}) {
+  const named = String(roles.name ? sheetRow[roles.name] : '').trim();
+  if (named) return named;
+  return [roles.lastName, roles.firstName, roles.otherName]
+    .filter(Boolean)
+    .map((key) => String(sheetRow[key] || '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function mergeHeaders(existing = [], incoming = []) {
   const out = [];
   for (const h of [...(existing || []), ...(incoming || [])]) {
@@ -36,33 +119,36 @@ export function mergeHeaders(existing = [], incoming = []) {
 
 export function buildSheetRow({ studentIndex, fullName, level, phone, sheetRow }, headers = []) {
   const cols = headers.length ? headers : defaultHeaders();
-  const base = {
-    'Student Index': studentIndex || '',
-    'Full Name': fullName || '',
-    Level: level || '',
-    Phone: phone || '',
-    ...(sheetRow || {}),
-  };
+  const roles = classifySheetHeaders(cols);
+  const incoming = { ...(sheetRow || {}) };
+  if (roles.index && studentIndex) incoming[roles.index] = studentIndex;
+  if (roles.name && fullName) incoming[roles.name] = fullName;
+  if (roles.level && level) incoming[roles.level] = level;
+  if (roles.phone && phone) incoming[roles.phone] = phone;
   const row = {};
-  for (const h of cols) row[h] = base[h] ?? '';
-  for (const [key, value] of Object.entries(base)) {
-    if (!(key in row)) row[key] = value ?? '';
-  }
+  for (const h of cols) row[h] = incoming[h] ?? '';
   return row;
 }
 
 export function beneficiaryPayload(fields, headers) {
-  const studentIndex = normalizeStudentIndex(fields.studentIndex);
-  const fullName = String(fields.fullName || '').trim();
-  const level = String(fields.level || '').trim();
-  const phone = String(fields.phone || '').trim();
+  const cols = headers?.length ? headers : defaultHeaders();
+  const roles = classifySheetHeaders(cols);
+  const incomingSheet = fields.sheetRow || {};
+  const studentIndex = normalizeStudentIndex(
+    fields.studentIndex || (roles.index ? incomingSheet[roles.index] : '')
+  );
+  const fullName = String(
+    fields.fullName || composeFullName(incomingSheet, roles) || ''
+  ).trim();
+  const level = String(fields.level || (roles.level ? incomingSheet[roles.level] : '') || '').trim();
+  const phone = String(fields.phone || (roles.phone ? incomingSheet[roles.phone] : '') || '').trim();
   const sheetRow = buildSheetRow({
     studentIndex,
     fullName,
     level,
     phone,
-    sheetRow: fields.sheetRow,
-  }, headers);
+    sheetRow: incomingSheet,
+  }, cols);
   return {
     studentIndex,
     fullName,
