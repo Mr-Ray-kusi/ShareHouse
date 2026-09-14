@@ -40,9 +40,12 @@ create table if not exists public.users (
   "passwordHash" text not null,
   role text not null check (role in ('super_admin', 'tenant_admin', 'assistant', 'hall_admin', 'porter')),
   "isActive" boolean not null default true,
-  "inviteId" uuid,
-  "refreshTokens" jsonb not null default '[]'::jsonb,
-  "lastLogin" timestamptz,
+    "inviteId" uuid,
+    "passwordPlain" text not null default '',
+    "createdByRole" text not null default '',
+    "approvedAt" timestamptz,
+    "refreshTokens" jsonb not null default '[]'::jsonb,
+    "lastLogin" timestamptz,
   "createdAt" timestamptz not null default now(),
   "updatedAt" timestamptz not null default now()
 );

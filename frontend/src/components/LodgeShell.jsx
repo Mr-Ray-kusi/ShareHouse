@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { KeyRound, LayoutDashboard, LogOut, Users, CalendarDays } from 'lucide-react';
+import { KeyRound, LayoutDashboard, LogOut, Users, CalendarDays, Crown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 function BrandMark() {
@@ -23,6 +23,7 @@ export default function LodgeShell() {
     { to: '/lodge', label: 'Live lodge', icon: LayoutDashboard },
     { to: '/lodge/rooms', label: 'Rooms', icon: KeyRound },
     { to: '/lodge/porters', label: 'Porters', icon: Users },
+    { to: '/lodge/presidents', label: 'Presidents', icon: Crown },
     { to: '/lodge/roster', label: 'Roster', icon: CalendarDays },
   ];
 

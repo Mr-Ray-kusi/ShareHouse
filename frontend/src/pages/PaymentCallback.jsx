@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { homeFor } from '../utils/homeFor';
 
 export default function PaymentCallback() {
   const [params] = useSearchParams();
@@ -21,7 +22,7 @@ export default function PaymentCallback() {
           setMessage(
             data.message
             || (pending
-              ? 'Payment received. A system admin must approve this hall before you can sign in.'
+              ? 'Payment received. A system admin must approve this hall and your hall administrator account before you can sign in.'
               : 'Payment confirmed.')
           );
         }
@@ -50,7 +51,7 @@ export default function PaymentCallback() {
         <p className="mt-3 text-sm text-ink/70">{message}</p>
         <div className="mt-6">
           {user && !pendingApproval ? (
-            <Link to="/app" className="btn-primary">Open hall desk</Link>
+            <Link to={homeFor(user.role)} className="btn-primary">Open desk</Link>
           ) : (
             <Link to="/login" className="btn-primary">Back to sign in</Link>
           )}

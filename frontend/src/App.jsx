@@ -17,6 +17,7 @@ import SuperFunnel from './pages/super/SuperFunnel';
 import SuperAudience from './pages/super/SuperAudience';
 import SuperHalls from './pages/super/SuperHalls';
 import SuperUploads from './pages/super/SuperUploads';
+import SuperAccounts from './pages/super/SuperAccounts';
 import TenantDetail from './pages/super/TenantDetail';
 import TenantDashboard from './pages/tenant/TenantDashboard';
 import Distributions from './pages/tenant/Distributions';
@@ -30,6 +31,7 @@ import LodgeBoard from './pages/lodge/LodgeBoard';
 import LodgeRooms from './pages/lodge/LodgeRooms';
 import LodgeRoomDetail from './pages/lodge/LodgeRoomDetail';
 import LodgePorters from './pages/lodge/LodgePorters';
+import LodgePresidents from './pages/lodge/LodgePresidents';
 import LodgeRoster from './pages/lodge/LodgeRoster';
 import PorterDesk from './pages/lodge/PorterDesk';
 
@@ -86,6 +88,7 @@ export default function App() {
         <Route path="/super/funnel" element={<SuperFunnel />} />
         <Route path="/super/audience" element={<SuperAudience />} />
         <Route path="/super/halls" element={<SuperHalls />} />
+        <Route path="/super/accounts" element={<SuperAccounts />} />
         <Route path="/super/uploads" element={<SuperUploads />} />
         <Route path="/super/tenants/:tenantId" element={<TenantDetail />} />
       </Route>
@@ -111,6 +114,7 @@ export default function App() {
         <Route path="/lodge/rooms" element={<LodgeRooms />} />
         <Route path="/lodge/rooms/:roomId" element={<LodgeRoomDetail />} />
         <Route path="/lodge/porters" element={<LodgePorters />} />
+        <Route path="/lodge/presidents" element={<LodgePresidents />} />
         <Route path="/lodge/roster" element={<LodgeRoster />} />
       </Route>
 

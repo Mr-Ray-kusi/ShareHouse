@@ -88,8 +88,11 @@ export function AuthProvider({ children }) {
     bootstrap();
   }, []);
 
-  async function login(email, password) {
-    const { data } = await api.post('/api/auth/login', { email, password });
+  async function login(payload, password) {
+    const body = typeof payload === 'string'
+      ? { email: payload, password }
+      : payload;
+    const { data } = await api.post('/api/auth/login', body);
     applySession(data);
     return data;
   }

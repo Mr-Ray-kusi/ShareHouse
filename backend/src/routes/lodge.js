@@ -5,6 +5,7 @@ import * as porters from '../controllers/porterInviteController.js';
 import * as desk from '../controllers/lodgeDeskController.js';
 import * as board from '../controllers/lodgeBoardController.js';
 import * as roster from '../controllers/lodgeRosterController.js';
+import * as presidents from '../controllers/presidentController.js';
 import { authenticate, requireRoles, requireActiveTenant, blockSupportWrites } from '../middleware/auth.js';
 
 const upload = multer({
@@ -31,6 +32,13 @@ router.get('/rooms', requireRoles('hall_admin'), register.listRooms);
 router.get('/rooms/:id', requireRoles('hall_admin'), register.getRoom);
 router.get('/occupants', requireRoles('hall_admin'), register.searchOccupants);
 router.post('/rooms/upload', requireRoles('hall_admin'), upload.single('file'), register.uploadRoomRegister);
+
+router.get('/presidents', requireRoles('hall_admin'), presidents.listPresidents);
+router.post('/presidents', requireRoles('hall_admin'), presidents.createPresident);
+router.post('/presidents/:id/password', requireRoles('hall_admin'), presidents.setPresidentPassword);
+router.post('/presidents/:id/revoke', requireRoles('hall_admin'), presidents.revokePresident);
+router.post('/presidents/:id/restore', requireRoles('hall_admin'), presidents.restorePresident);
+router.post('/presidents/:id/delete', requireRoles('hall_admin'), presidents.deletePresident);
 
 router.get('/porters', requireRoles('hall_admin'), porters.listPorterInvites);
 router.post('/porters', requireRoles('hall_admin'), porters.createPorterInvite);

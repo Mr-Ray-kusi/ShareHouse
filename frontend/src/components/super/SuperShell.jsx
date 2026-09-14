@@ -6,6 +6,7 @@ import {
   Filter,
   Globe2,
   Building2,
+  UserCog,
   FileSpreadsheet,
   LogOut,
   Search,
@@ -20,6 +21,7 @@ const LINKS = [
   { to: '/super/funnel', label: 'Business funnel', icon: Filter },
   { to: '/super/audience', label: 'Audience & acquisition', icon: Globe2 },
   { to: '/super/halls', label: 'Registered Halls', icon: Building2 },
+  { to: '/super/accounts', label: 'Staff accounts', icon: UserCog },
   { to: '/super/uploads', label: 'Uploaded Excel files', icon: FileSpreadsheet },
 ];
 
