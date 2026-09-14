@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import { homeFor } from './utils/homeFor';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppShell from './components/AppShell';
 import Landing from './pages/Landing';
@@ -22,14 +23,21 @@ import Distributions from './pages/tenant/Distributions';
 import DistributionDetail from './pages/tenant/DistributionDetail';
 import Assistants from './pages/tenant/Assistants';
 import AssistantHome from './pages/assistant/AssistantHome';
+import JoinPorter from './pages/JoinPorter';
+import LodgeShell from './components/LodgeShell';
+import LodgeDeskShell from './components/LodgeDeskShell';
+import LodgeBoard from './pages/lodge/LodgeBoard';
+import LodgeRooms from './pages/lodge/LodgeRooms';
+import LodgeRoomDetail from './pages/lodge/LodgeRoomDetail';
+import LodgePorters from './pages/lodge/LodgePorters';
+import LodgeRoster from './pages/lodge/LodgeRoster';
+import PorterDesk from './pages/lodge/PorterDesk';
 
 function HomeRedirect() {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user) return <Navigate to="/" replace />;
-  if (user.role === 'super_admin') return <Navigate to="/super/health" replace />;
-  if (user.role === 'assistant') return <Navigate to="/collect" replace />;
-  return <Navigate to="/app" replace />;
+  return <Navigate to={homeFor(user.role)} replace />;
 }
 
 export default function App() {
@@ -40,6 +48,7 @@ export default function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/payment/callback" element={<PaymentCallback />} />
       <Route path="/join/:code" element={<JoinAssistant />} />
+      <Route path="/lodge-join/:code" element={<JoinPorter />} />
       <Route path="/go" element={<HomeRedirect />} />
 
       <Route
@@ -89,6 +98,30 @@ export default function App() {
         }
       >
         <Route path="/collect" element={<AssistantHome />} />
+      </Route>
+
+      <Route
+        element={
+          <ProtectedRoute roles={['hall_admin']}>
+            <LodgeShell />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/lodge" element={<LodgeBoard />} />
+        <Route path="/lodge/rooms" element={<LodgeRooms />} />
+        <Route path="/lodge/rooms/:roomId" element={<LodgeRoomDetail />} />
+        <Route path="/lodge/porters" element={<LodgePorters />} />
+        <Route path="/lodge/roster" element={<LodgeRoster />} />
+      </Route>
+
+      <Route
+        element={
+          <ProtectedRoute roles={['porter']}>
+            <LodgeDeskShell />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/lodge/desk" element={<PorterDesk />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -19,6 +19,7 @@ create table if not exists public.tenants (
   "paystackReference" text not null default '',
   "lastPaymentAt" timestamptz,
   "joinCode" text,
+  "lodgeJoinCode" text,
   "createdAt" timestamptz not null default now(),
   "updatedAt" timestamptz not null default now()
 );
@@ -26,6 +27,9 @@ create table if not exists public.tenants (
 create unique index if not exists tenants_join_code_uidx
   on public.tenants ("joinCode")
   where "joinCode" is not null;
+create unique index if not exists tenants_lodge_join_code_uidx
+  on public.tenants ("lodgeJoinCode")
+  where "lodgeJoinCode" is not null;
 
 create table if not exists public.users (
   id uuid primary key default gen_random_uuid(),
@@ -34,7 +38,7 @@ create table if not exists public.users (
   email text,
   phone text not null default '',
   "passwordHash" text not null,
-  role text not null check (role in ('super_admin', 'tenant_admin', 'assistant')),
+  role text not null check (role in ('super_admin', 'tenant_admin', 'assistant', 'hall_admin', 'porter')),
   "isActive" boolean not null default true,
   "inviteId" uuid,
   "refreshTokens" jsonb not null default '[]'::jsonb,
@@ -233,3 +237,5 @@ alter table public.sheet_uploads enable row level security;
 alter table public.system_events enable row level security;
 alter table public.collection_voids enable row level security;
 alter table public.list_exceptions enable row level security;
+
+-- Porter lodge tables live in porter-lodge.sql so existing sharing tables stay untouched.

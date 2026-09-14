@@ -106,6 +106,12 @@ export function AuthProvider({ children }) {
     return data;
   }
 
+  async function joinPorter(code, name, password) {
+    const { data } = await api.post(`/api/auth/lodge-join/${code}`, { name, password });
+    applySession(data);
+    return data;
+  }
+
   async function logout() {
     try {
       await api.post('/api/auth/logout');
@@ -135,6 +141,7 @@ export function AuthProvider({ children }) {
       login,
       register,
       joinAssistant,
+      joinPorter,
       logout,
       refreshMe,
       applySession,

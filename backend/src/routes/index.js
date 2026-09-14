@@ -8,6 +8,7 @@ import dashboardRoutes from './dashboard.js';
 import superRoutes from './super.js';
 import telemetryRoutes from './telemetry.js';
 import exceptionRoutes from './exceptions.js';
+import lodgeRoutes from './lodge.js';
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/super', superRoutes);
 router.use('/telemetry', telemetryRoutes);
 router.use('/exceptions', exceptionRoutes);
+router.use('/lodge', lodgeRoutes);
 
 export default router;

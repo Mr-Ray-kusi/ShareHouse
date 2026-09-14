@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { Tenant, User, Invite } from '../models/index.js';
+import { Tenant, User, Invite, PorterInvite } from '../models/index.js';
 import { env, getPlan } from '../config/env.js';
 import { uniqueTenantId } from '../utils/slug.js';
 import { generateInviteCode, addYears, isFieldQrCode } from '../utils/codes.js';
@@ -178,6 +178,18 @@ export const login = asyncHandler(async (req, res) => {
     }
   }
 
+  if (user.role === 'hall_admin') {
+    if (!tenant) {
+      return res.status(404).json({ message: 'Hall not found for this account.' });
+    }
+    if (!tenant.hasAccess()) {
+      return res.status(403).json({
+        message: 'This hall is not active yet. Lodge access opens after payment and system admin approval.',
+        code: 'LODGE_HALL_INACTIVE',
+      });
+    }
+  }
+
   if (!user.isActive) {
     return res.status(403).json({ message: 'This account has been deactivated.' });
   }
@@ -270,6 +282,85 @@ export const joinAssistant = asyncHandler(async (req, res) => {
   const session = await issueSession(res, user);
   return res.json({
     message: 'Assistant signed in.',
+    ...session,
+    tenant: { tenantId: tenant.tenantId, name: tenant.name, schoolName: tenant.schoolName },
+    invite: { code: invite.code, label: invite.label },
+  });
+});
+
+export const joinPorter = asyncHandler(async (req, res) => {
+  const code = String(req.params.code || '').toUpperCase().trim();
+  const { name, password } = req.body || {};
+  if (!name || !password) {
+    return res.status(400).json({ message: 'Name and lodge password are required.' });
+  }
+
+  let tenant = await Tenant.findOne({ lodgeJoinCode: code });
+  if (!tenant) tenant = await Tenant.findOne({ tenantId: String(req.params.code || '').toLowerCase() });
+
+  const invites = tenant
+    ? await PorterInvite.find({ tenantId: tenant.tenantId, isActive: true })
+    : await PorterInvite.find({ code, isActive: true });
+
+  if (!invites.length) {
+    return res.status(404).json({ message: 'This lodge join link is invalid or has been revoked.' });
+  }
+  if (!tenant) tenant = await Tenant.findOne({ tenantId: invites[0].tenantId });
+  if (!tenant?.hasAccess()) {
+    return res.status(402).json({ message: 'This hall subscription is not active.' });
+  }
+
+  const enteredName = String(name).trim();
+  const namedInvites = invites.filter((row) => {
+    const bound = [row.porterName, row.label].filter(Boolean);
+    return bound.some((stored) => namesMatch(enteredName, stored));
+  });
+
+  let invite = null;
+  const candidates = namedInvites.length
+    ? namedInvites
+    : invites.filter((row) => !row.porterName && !row.label && !row.porterId);
+
+  for (const row of candidates) {
+    if (await bcrypt.compare(password, row.passwordHash)) {
+      invite = row;
+      break;
+    }
+  }
+  if (!invite) {
+    return res.status(401).json({ message: 'That password does not match this porter name.' });
+  }
+
+  let user = invite.porterId ? await User.findById(invite.porterId) : null;
+  if (user && !user.isActive) {
+    return res.status(403).json({ message: 'This porter access has been revoked.' });
+  }
+  if (user && !namesMatch(enteredName, user.name) && !namesMatch(enteredName, invite.porterName) && !namesMatch(enteredName, invite.label)) {
+    return res.status(401).json({ message: 'That password does not match this porter name.' });
+  }
+
+  if (!user) {
+    user = await User.create({
+      tenantId: invite.tenantId,
+      name: enteredName,
+      passwordHash: await User.hashPassword(password),
+      role: 'porter',
+      isActive: true,
+      inviteId: invite._id,
+    });
+    invite.porterId = user._id;
+    invite.porterName = enteredName;
+  } else if (!invite.porterName) {
+    invite.porterName = user.name;
+  }
+
+  invite.lastUsedAt = new Date();
+  await invite.save();
+  await user.save();
+
+  const session = await issueSession(res, user);
+  return res.json({
+    message: 'Porter signed in.',
     ...session,
     tenant: { tenantId: tenant.tenantId, name: tenant.name, schoolName: tenant.schoolName },
     invite: { code: invite.code, label: invite.label },
