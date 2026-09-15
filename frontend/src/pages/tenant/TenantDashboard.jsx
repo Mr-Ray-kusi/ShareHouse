@@ -93,7 +93,6 @@ export default function TenantDashboard() {
   }
 
   useEffect(() => {
-  useEffect(() => {
     listRequested.current = false;
     setList([]);
     setView(null);
