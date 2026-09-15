@@ -50,6 +50,12 @@ export const env = {
   superAdminPassword: process.env.SUPER_ADMIN_PASSWORD || '',
   superAdminName: process.env.SUPER_ADMIN_NAME || 'ShareHouse Super Admin',
   cookieSecure: process.env.COOKIE_SECURE === 'true',
+  smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
+  smtpPort: Number(process.env.SMTP_PORT) || 587,
+  smtpSecure: process.env.SMTP_SECURE === 'true' || Number(process.env.SMTP_PORT) === 465,
+  smtpUser: String(process.env.SMTP_USER || process.env.SUPER_ADMIN_EMAIL || '').trim(),
+  smtpPass: process.env.SMTP_PASS || '',
+  smtpFrom: process.env.SMTP_FROM || '',
 };
 
 export function getPlan(planKey) {

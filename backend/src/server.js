@@ -100,6 +100,7 @@ const authLimiter = rateLimit({
 });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/join', authLimiter);
+app.use('/api/auth/reset-password', authLimiter);
 
 app.use('/api', routes);
 app.use(notFound);

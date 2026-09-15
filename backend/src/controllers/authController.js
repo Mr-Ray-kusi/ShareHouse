@@ -9,6 +9,7 @@ import {
   refreshCookieOptions,
   signAccessToken,
   signRefreshToken,
+  verifyPasswordResetToken,
   verifyRefreshToken,
 } from '../utils/tokens.js';
 import { initializePayment } from '../services/paystackService.js';
@@ -337,4 +338,39 @@ export const me = asyncHandler(async (req, res) => {
     supportMode: req.supportMode,
     auth: req.auth,
   });
+});
+
+export const resetPassword = asyncHandler(async (req, res) => {
+  const { token, password } = req.body || {};
+  if (!token || !password) {
+    return res.status(400).json({ message: 'Reset token and new password are required.' });
+  }
+  if (String(password).length < 8) {
+    return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+  }
+
+  let payload;
+  try {
+    payload = verifyPasswordResetToken(token);
+  } catch (_err) {
+    return res.status(400).json({ message: 'This reset link is invalid or has expired. Ask the operator to send a new one.' });
+  }
+
+  if (payload.purpose !== 'password_reset' || !payload.sub) {
+    return res.status(400).json({ message: 'This reset link is invalid or has expired. Ask the operator to send a new one.' });
+  }
+
+  const user = await User.findById(payload.sub);
+  if (!user || user.role !== 'tenant_admin') {
+    return res.status(400).json({ message: 'This reset link is invalid or has expired. Ask the operator to send a new one.' });
+  }
+  if (payload.tenantId && user.tenantId !== payload.tenantId) {
+    return res.status(400).json({ message: 'This reset link is invalid or has expired. Ask the operator to send a new one.' });
+  }
+
+  user.passwordHash = await User.hashPassword(password);
+  user.refreshTokens = [];
+  await user.save();
+
+  return res.json({ message: 'Password updated. You can sign in with the new password.' });
 });

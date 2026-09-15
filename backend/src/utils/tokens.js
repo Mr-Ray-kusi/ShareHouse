@@ -24,6 +24,14 @@ export function hashToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+export function signPasswordResetToken(payload) {
+  return jwt.sign(payload, env.jwtAccessSecret, { expiresIn: '2h' });
+}
+
+export function verifyPasswordResetToken(token) {
+  return jwt.verify(token, env.jwtAccessSecret);
+}
+
 export function refreshCookieOptions() {
   return {
     httpOnly: true,

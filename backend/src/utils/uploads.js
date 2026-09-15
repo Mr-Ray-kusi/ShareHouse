@@ -28,6 +28,16 @@ export async function storedFileExists(storedFileName) {
   }
 }
 
+export async function deleteStoredFile(storedFileName) {
+  const name = String(storedFileName || '').trim();
+  if (!name || name.includes('..') || name.includes('/') || name.includes('\\')) return;
+  try {
+    await fs.unlink(storedUploadPath(name));
+  } catch {
+    /* already gone */
+  }
+}
+
 export function workbookFromBeneficiaries(headers, beneficiaries) {
   const cols = headers?.length
     ? headers

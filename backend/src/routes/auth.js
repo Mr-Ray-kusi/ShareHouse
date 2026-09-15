@@ -12,5 +12,6 @@ router.get('/join/:code', getInvitePublic);
 router.post('/refresh', auth.refresh);
 router.post('/logout', authenticate, auth.logout);
 router.get('/me', authenticate, auth.me);
+router.post('/reset-password', auth.resetPassword);
 
 export default router;

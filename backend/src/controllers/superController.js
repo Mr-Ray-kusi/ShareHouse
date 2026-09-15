@@ -1,8 +1,22 @@
 import path from 'path';
-import { Collection, Distribution, Tenant, User, Beneficiary, SheetUpload, SystemEvent } from '../models/index.js';
+import {
+  Collection,
+  CollectionVoid,
+  Distribution,
+  Tenant,
+  User,
+  Beneficiary,
+  SheetUpload,
+  SystemEvent,
+  Invite,
+  ListException,
+} from '../models/index.js';
+import { env } from '../config/env.js';
 import { addYears } from '../utils/codes.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { storedUploadPath, storedFileExists, workbookFromBeneficiaries } from '../utils/uploads.js';
+import { storedUploadPath, storedFileExists, deleteStoredFile, workbookFromBeneficiaries } from '../utils/uploads.js';
+import { signPasswordResetToken } from '../utils/tokens.js';
+import { sendMail } from '../services/mailer.js';
 
 function sendExcel(res, buffer, filename) {
   const safe = String(filename || 'list.xlsx').replace(/[^\w.\- ()]/g, '_');
@@ -166,6 +180,123 @@ export const setTenantActive = asyncHandler(async (req, res) => {
       ? 'Hall approved. The hall president can now sign in.'
       : 'Hall deactivated. President logins are blocked.',
   });
+});
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export const sendPasswordReset = asyncHandler(async (req, res) => {
+  const tenant = await Tenant.findOne({ tenantId: req.params.tenantId });
+  if (!tenant) return res.status(404).json({ message: 'Tenant not found.' });
+
+  const email = String(tenant.adminEmail || '').trim().toLowerCase();
+  if (!email) {
+    return res.status(400).json({ message: 'This account has no registration email.' });
+  }
+
+  const user = (await User.findOne({
+    tenantId: tenant.tenantId,
+    role: 'tenant_admin',
+    email,
+  })) || (await User.findOne({ tenantId: tenant.tenantId, role: 'tenant_admin' }));
+
+  if (!user) {
+    return res.status(404).json({ message: 'No president login exists for this hall or SRC.' });
+  }
+
+  const token = signPasswordResetToken({
+    sub: String(user.id || user._id),
+    tenantId: tenant.tenantId,
+    purpose: 'password_reset',
+  });
+  const resetUrl = `${env.frontendUrl}/reset-password?token=${encodeURIComponent(token)}`;
+  const kind = tenant.subscriptionPlan === 'src' ? 'SRC' : 'hall';
+  const safeName = escapeHtml(tenant.name);
+  const safeAdmin = escapeHtml(tenant.adminName || user.name);
+  const safeId = escapeHtml(tenant.tenantId);
+
+  try {
+    await sendMail({
+      to: email,
+      subject: 'Reset your ShareHouse password',
+      text: [
+        `Hello ${tenant.adminName || user.name},`,
+        '',
+        `ShareHouse was asked to reset the password for ${tenant.name} (${kind} id: ${tenant.tenantId}).`,
+        'Open this link within 2 hours to choose a new password:',
+        resetUrl,
+        '',
+        'If you did not ask for this, ignore this email. Your current password still works.',
+      ].join('\n'),
+      html: `
+        <p>Hello ${safeAdmin},</p>
+        <p>ShareHouse was asked to reset the password for <strong>${safeName}</strong> (${kind} id: ${safeId}).</p>
+        <p><a href="${resetUrl}">Choose a new password</a></p>
+        <p>This link expires in 2 hours. If you did not ask for this, ignore this email. Your current password still works.</p>
+      `,
+    });
+  } catch (err) {
+    if (err.status) throw err;
+    const wrapped = new Error(err.message || 'The reset email could not be sent. Check SMTP settings on the API host.');
+    wrapped.status = 503;
+    throw wrapped;
+  }
+
+  return res.json({
+    message: `Password reset email sent to ${email}.`,
+    email,
+  });
+});
+
+export const deleteTenant = asyncHandler(async (req, res) => {
+  const tenant = await Tenant.findOne({ tenantId: req.params.tenantId });
+  if (!tenant) return res.status(404).json({ message: 'Tenant not found.' });
+
+  const tenantId = String(tenant.tenantId || '').trim();
+  if (!tenantId) {
+    return res.status(400).json({ message: 'This account is missing a hall id and cannot be deleted.' });
+  }
+
+  const [uploads, exceptions] = await Promise.all([
+    SheetUpload.find({ tenantId }),
+    ListException.find({ tenantId }),
+  ]);
+  const files = [
+    ...uploads.map((row) => row.storedFileName),
+    ...exceptions.map((row) => row.photoFileName),
+  ].filter(Boolean);
+
+  await CollectionVoid.deleteMany({ tenantId });
+  await ListException.deleteMany({ tenantId });
+  await Collection.deleteMany({ tenantId });
+  await Beneficiary.deleteMany({ tenantId });
+  await SheetUpload.deleteMany({ tenantId });
+  await Invite.deleteMany({ tenantId });
+  await Distribution.deleteMany({ tenantId });
+  await SystemEvent.deleteMany({ tenantId });
+  await User.deleteMany({ tenantId });
+
+  let linkedHalls = [];
+  try {
+    linkedHalls = await Tenant.find({ srcTenantId: tenantId });
+  } catch (_err) {
+    linkedHalls = [];
+  }
+  for (const hall of linkedHalls) {
+    hall.srcTenantId = null;
+    await hall.save();
+  }
+
+  await Tenant.deleteMany({ tenantId });
+  await Promise.all(files.map((name) => deleteStoredFile(name)));
+
+  const kind = tenant.subscriptionPlan === 'src' ? 'SRC' : 'Hall';
+  return res.json({ message: `${kind} account ${tenant.name} was permanently deleted.` });
 });
 
 function pct(part, whole) {

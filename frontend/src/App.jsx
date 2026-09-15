@@ -5,6 +5,7 @@ import AppShell from './components/AppShell';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ResetPassword from './pages/ResetPassword';
 import PaymentCallback from './pages/PaymentCallback';
 import JoinAssistant from './pages/JoinAssistant';
 import Paywall from './pages/Paywall';
@@ -38,6 +39,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/register" element={<Register />} />
       <Route path="/payment/callback" element={<PaymentCallback />} />
       <Route path="/join/:code" element={<JoinAssistant />} />
