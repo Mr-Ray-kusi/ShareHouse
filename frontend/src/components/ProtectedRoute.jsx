@@ -1,6 +1,5 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { homeFor } from '../utils/homeFor';
 
 export default function ProtectedRoute({ children, roles }) {
   const { user, loading, tenant } = useAuth();
@@ -19,7 +18,9 @@ export default function ProtectedRoute({ children, roles }) {
   }
 
   if (roles && !roles.includes(user.role)) {
-    return <Navigate to={homeFor(user.role)} replace />;
+    if (user.role === 'super_admin') return <Navigate to="/super" replace />;
+    if (user.role === 'assistant') return <Navigate to="/collect" replace />;
+    return <Navigate to="/app" replace />;
   }
 
   const paywalled =

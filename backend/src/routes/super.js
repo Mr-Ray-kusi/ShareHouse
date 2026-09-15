@@ -11,6 +11,5 @@ router.get('/uploads/:id/download', superAdmin.downloadUpload);
 router.get('/distributions/:id/excel', superAdmin.downloadDistributionExcel);
 router.get('/tenants/:tenantId', superAdmin.getTenant);
 router.patch('/tenants/:tenantId/status', superAdmin.setTenantActive);
-router.post('/tenants/:tenantId/hall-admins', superAdmin.createHallAdmin);
 
 export default router;

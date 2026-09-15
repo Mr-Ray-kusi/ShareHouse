@@ -124,26 +124,15 @@ export const getTenant = asyncHandler(async (req, res) => {
   const tenant = await Tenant.findOne({ tenantId: req.params.tenantId });
   if (!tenant) return res.status(404).json({ message: 'Tenant not found.' });
 
-  const [admins, assistants, hallAdmins, porters, distributions, collections, uploads] = await Promise.all([
+  const [admins, assistants, distributions, collections, uploads] = await Promise.all([
     User.find({ tenantId: tenant.tenantId, role: 'tenant_admin' }).select('-passwordHash -refreshTokens'),
     User.find({ tenantId: tenant.tenantId, role: 'assistant' }).select('-passwordHash -refreshTokens'),
-    User.find({ tenantId: tenant.tenantId, role: 'hall_admin' }).select('-passwordHash -refreshTokens'),
-    User.find({ tenantId: tenant.tenantId, role: 'porter' }).select('-passwordHash -refreshTokens'),
     Distribution.find({ tenantId: tenant.tenantId }).sort({ createdAt: -1 }),
     Collection.countDocuments({ tenantId: tenant.tenantId }),
     SheetUpload.find({ tenantId: tenant.tenantId }).sort({ createdAt: -1 }),
   ]);
 
-  res.json({
-    tenant,
-    admins,
-    assistants,
-    hallAdmins,
-    porters,
-    distributions,
-    collectionCount: collections,
-    uploads,
-  });
+  res.json({ tenant, admins, assistants, distributions, collectionCount: collections, uploads });
 });
 
 export const setTenantActive = asyncHandler(async (req, res) => {
@@ -164,10 +153,8 @@ export const setTenantActive = asyncHandler(async (req, res) => {
   }
   await tenant.save();
 
-  const presidents = await User.find({ tenantId: tenant.tenantId, role: 'tenant_admin' });
-  const hallAdmins = await User.find({ tenantId: tenant.tenantId, role: 'hall_admin' });
-  const staff = [...presidents, ...hallAdmins];
-  for (const admin of staff) {
+  const admins = await User.find({ tenantId: tenant.tenantId, role: 'tenant_admin' });
+  for (const admin of admins) {
     admin.isActive = wantActive;
     if (!wantActive) admin.refreshTokens = [];
     await admin.save();
@@ -176,39 +163,8 @@ export const setTenantActive = asyncHandler(async (req, res) => {
   res.json({
     tenant,
     message: tenant.isActive
-      ? 'Hall approved. The hall admin can now sign in.'
-      : 'Hall deactivated. Hall admin logins are blocked.',
-  });
-});
-
-export const createHallAdmin = asyncHandler(async (req, res) => {
-  const tenant = await Tenant.findOne({ tenantId: req.params.tenantId });
-  if (!tenant) return res.status(404).json({ message: 'Hall not found.' });
-  const name = String(req.body?.name || '').trim();
-  const email = String(req.body?.email || '').toLowerCase().trim();
-  const password = String(req.body?.password || '').trim();
-  if (!name || !email || !password) {
-    return res.status(400).json({ message: 'Name, email, and password are required.' });
-  }
-  if (password.length < 8) {
-    return res.status(400).json({ message: 'Password must be at least 8 characters.' });
-  }
-  const existing = await User.findOne({ email });
-  if (existing) {
-    return res.status(409).json({ message: 'An account with this email already exists.' });
-  }
-  const user = await User.create({
-    tenantId: tenant.tenantId,
-    name,
-    email,
-    phone: tenant.adminPhone || '',
-    passwordHash: await User.hashPassword(password),
-    role: 'hall_admin',
-    isActive: true,
-  });
-  res.status(201).json({
-    hallAdmin: user.toSafeJSON(),
-    message: 'Hall administrator created. They sign in on the same login page, then open the lodge.',
+      ? 'Hall approved. The hall president can now sign in.'
+      : 'Hall deactivated. President logins are blocked.',
   });
 });
 

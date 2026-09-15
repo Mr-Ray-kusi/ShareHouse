@@ -10,8 +10,6 @@ export default function TenantDetail() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [statusBusy, setStatusBusy] = useState(false);
-  const [hallAdmin, setHallAdmin] = useState({ name: '', email: '', password: '' });
-  const [hallAdminBusy, setHallAdminBusy] = useState(false);
 
   useEffect(() => {
     api
@@ -74,44 +72,6 @@ export default function TenantDetail() {
         />
         <MetricCard accent icon={Package} label="Collections" value={data.collectionCount} hint="Logged collections for this hall" />
       </div>
-      <Panel title="Hall administrators (porter lodge)" className="mt-4">
-        <p className="text-sm text-slate-500 mb-3">
-          Lodge staff are not the hall president. Create a hall admin so they can run rooms, porters, and the roster.
-        </p>
-        <ul className="space-y-2 text-sm mb-4">
-          {(data.hallAdmins || []).map((admin) => (
-            <li key={admin._id || admin.id}>
-              {admin.name} · {admin.email} · {admin.isActive ? 'Active' : 'Inactive'}
-            </li>
-          ))}
-          {!(data.hallAdmins || []).length && <li className="text-slate-400">No hall administrator yet.</li>}
-        </ul>
-        <form
-          className="grid gap-2 md:grid-cols-[1fr_1fr_1fr_auto]"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setHallAdminBusy(true);
-            setError('');
-            try {
-              await api.post(`/api/super/tenants/${tenantId}/hall-admins`, hallAdmin);
-              const { data: d } = await api.get(`/api/super/tenants/${tenantId}`);
-              setData(d);
-              setHallAdmin({ name: '', email: '', password: '' });
-            } catch (err) {
-              setError(err.response?.data?.message || 'Could not create hall administrator.');
-            } finally {
-              setHallAdminBusy(false);
-            }
-          }}
-        >
-          <input className="input" placeholder="Name" value={hallAdmin.name} onChange={(e) => setHallAdmin((prev) => ({ ...prev, name: e.target.value }))} required />
-          <input className="input" type="email" placeholder="Email" value={hallAdmin.email} onChange={(e) => setHallAdmin((prev) => ({ ...prev, email: e.target.value }))} required />
-          <input className="input" type="password" placeholder="Password" value={hallAdmin.password} onChange={(e) => setHallAdmin((prev) => ({ ...prev, password: e.target.value }))} required />
-          <button className="rounded-full bg-[#2563eb] text-white text-xs font-semibold px-4 py-1.5" disabled={hallAdminBusy}>
-            {hallAdminBusy ? 'Saving…' : 'Add hall admin'}
-          </button>
-        </form>
-      </Panel>
       <Panel title="Uploaded Excel files" className="mt-4">
         <ul className="space-y-3">
           {(data.uploads || []).map((file) => (

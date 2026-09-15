@@ -18,7 +18,6 @@ export const Tenant = createModel({
     'paystackReference',
     'lastPaymentAt',
     'joinCode',
-    'lodgeJoinCode',
     'createdAt',
     'updatedAt',
   ],
@@ -26,7 +25,6 @@ export const Tenant = createModel({
   prepare(doc) {
     if (doc.adminEmail) doc.adminEmail = String(doc.adminEmail).toLowerCase().trim();
     if (doc.joinCode) doc.joinCode = String(doc.joinCode).toUpperCase().trim();
-    if (doc.lodgeJoinCode) doc.lodgeJoinCode = String(doc.lodgeJoinCode).toUpperCase().trim();
   },
   virtuals: {
     isExpired() {
