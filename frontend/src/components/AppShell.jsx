@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Package, Users, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, Users, LogOut, Building2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 function BrandMark() {
@@ -52,10 +52,12 @@ export default function AppShell() {
     );
   }
 
+  const isSrc = tenant?.subscriptionPlan === 'src';
   const links = [
     { to: '/app', label: 'Live desk', icon: LayoutDashboard },
     { to: '/app/distributions', label: 'Distributions', icon: Package },
     { to: '/app/assistants', label: 'Assistants', icon: Users },
+    ...(isSrc ? [{ to: '/app/halls', label: 'Campus halls', icon: Building2 }] : []),
   ];
 
   return (
@@ -69,7 +71,7 @@ export default function AppShell() {
             <NavLink
               key={link.to}
               to={link.to}
-              end={link.to === '/app' || link.to === '/super'}
+              end={link.to === '/app'}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${
                   isActive ? 'bg-white/10 text-gold-400' : 'text-cream/80 hover:bg-white/5'
@@ -95,12 +97,12 @@ export default function AppShell() {
             <LogOut size={14} />
           </button>
         </header>
-        <div className="md:hidden shrink-0 flex justify-center gap-2 px-3 py-2 bg-white border-b border-forest-100">
+        <div className="md:hidden shrink-0 flex justify-center gap-2 px-3 py-2 bg-white border-b border-forest-100 overflow-x-auto">
           {links.map((link) => (
             <NavLink
               key={link.to}
               to={link.to}
-              end
+              end={link.to === '/app'}
               className={({ isActive }) =>
                 `whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold ${
                   isActive ? 'bg-forest-600 text-white' : 'bg-mist text-forest-800'

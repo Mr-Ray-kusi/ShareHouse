@@ -12,6 +12,7 @@ const empty = {
   adminPhone: '',
   password: '',
   subscriptionPlan: 'hall',
+  srcCode: '',
 };
 
 export default function Register() {
@@ -71,7 +72,7 @@ export default function Register() {
           </button>
           <button type="button" onClick={() => set('subscriptionPlan', 'src')} className={`rounded-xl border px-3 py-3 text-left ${form.subscriptionPlan === 'src' ? 'border-gold-500 bg-gold-400/10' : 'border-forest-100'}`}>
             <p className="font-semibold">SRC · GHS 1,500</p>
-            <p className="text-xs text-ink/60">Campus-wide desk</p>
+            <p className="text-xs text-ink/60">Campus-wide desk and hall monitoring</p>
           </button>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
@@ -84,7 +85,7 @@ export default function Register() {
             <input className="input" placeholder="KNUST" value={form.schoolName} onChange={(e) => set('schoolName', e.target.value)} required />
           </div>
           <div>
-            <label className="label">President name</label>
+            <label className="label">{form.subscriptionPlan === 'src' ? 'SRC officer name' : 'President name'}</label>
             <input className="input" value={form.adminName} onChange={(e) => set('adminName', e.target.value)} required />
           </div>
           <div>
@@ -99,6 +100,12 @@ export default function Register() {
             <label className="label">Password</label>
             <PasswordField minLength={8} autoComplete="new-password" value={form.password} onChange={(e) => set('password', e.target.value)} required />
           </div>
+          {form.subscriptionPlan === 'hall' ? (
+            <div>
+              <label className="label">SRC ID (optional)</label>
+              <input className="input" placeholder="Campus SRC ID" value={form.srcCode} onChange={(e) => set('srcCode', e.target.value)} />
+            </div>
+          ) : null}
         </div>
         <button className="btn-primary w-full md:w-auto md:px-10" disabled={busy}>{busy ? 'Opening Paystack…' : 'Continue to payment'}</button>
       </form>

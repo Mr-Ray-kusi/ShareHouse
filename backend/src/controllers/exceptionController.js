@@ -140,7 +140,12 @@ export const createException = asyncHandler(async (req, res) => {
 
 export const reviewException = asyncHandler(async (req, res) => {
   if (req.user.role !== 'tenant_admin') {
-    return res.status(403).json({ message: 'Only the hall admin can approve or reject walk-ins.' });
+    return res.status(403).json({ message: 'Only the hall president can approve or reject walk-ins.' });
+  }
+  if (req.tenant?.subscriptionPlan === 'src') {
+    return res.status(403).json({
+      message: 'SRC can monitor halls but cannot approve a student. The hall president must review walk-ins.',
+    });
   }
 
   const row = await ListException.findOne({

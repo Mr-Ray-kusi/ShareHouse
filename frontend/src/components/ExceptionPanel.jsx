@@ -10,7 +10,7 @@ function statusLabel(status) {
   return status;
 }
 
-function PhotoThumb({ id, hasPhoto }) {
+function PhotoThumb({ id, hasPhoto, photoBase = '/api/exceptions' }) {
   const [src, setSrc] = useState('');
   useEffect(() => {
     if (!hasPhoto || !id) return undefined;
@@ -18,7 +18,7 @@ function PhotoThumb({ id, hasPhoto }) {
     const headers = {};
     const token = getAccessToken();
     if (token) headers.Authorization = `Bearer ${token}`;
-    fetch(`${apiOrigin()}/api/exceptions/${id}/photo`, { headers, credentials: 'include' })
+    fetch(`${apiOrigin()}${photoBase}/${id}/photo`, { headers, credentials: 'include' })
       .then((res) => (res.ok ? res.blob() : null))
       .then((blob) => {
         if (!blob) return;
@@ -29,7 +29,7 @@ function PhotoThumb({ id, hasPhoto }) {
     return () => {
       if (revoke) URL.revokeObjectURL(revoke);
     };
-  }, [id, hasPhoto]);
+  }, [id, hasPhoto, photoBase]);
   if (!hasPhoto) return null;
   if (!src) return <p className="text-xs text-ink/50">Photo attached</p>;
   return <img src={src} alt="Walk-in photo" className="mt-2 h-24 w-24 rounded-xl object-cover" />;
@@ -39,6 +39,7 @@ export default function ExceptionPanel({
   items = [],
   canReview = false,
   busyId = '',
+  photoBase = '/api/exceptions',
   onApprove,
   onReject,
   onCancel,
@@ -65,7 +66,7 @@ export default function ExceptionPanel({
               {row.reviewNote && row.status !== 'pending' ? (
                 <p className="mt-1 text-xs text-ink/60">{row.reviewNote}</p>
               ) : null}
-              <PhotoThumb id={row.id} hasPhoto={row.hasPhoto} />
+              <PhotoThumb id={row.id} hasPhoto={row.hasPhoto} photoBase={photoBase} />
             </div>
             <span className="rounded-full bg-mist px-2 py-1 text-xs font-semibold uppercase tracking-wider">
               {statusLabel(row.status)}

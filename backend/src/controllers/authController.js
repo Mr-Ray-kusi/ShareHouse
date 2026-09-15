@@ -15,6 +15,7 @@ import { initializePayment } from '../services/paystackService.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { track } from '../services/telemetry.js';
 import { namesMatch } from '../utils/search.js';
+import { resolveSrcTenant } from '../utils/srcHalls.js';
 
 function setRefreshCookie(res, token) {
   res.cookie('ws_refresh', token, refreshCookieOptions());
@@ -51,6 +52,7 @@ export const register = asyncHandler(async (req, res) => {
     adminPhone,
     password,
     subscriptionPlan,
+    srcCode,
   } = req.body || {};
 
   if (!name || !schoolName || !adminName || !adminEmail || !adminPhone || !password || !subscriptionPlan) {
@@ -85,6 +87,11 @@ export const register = asyncHandler(async (req, res) => {
   }
 
   const plan = getPlan(subscriptionPlan);
+  let srcTenantId = null;
+  if (plan.key === 'hall' && String(srcCode || '').trim()) {
+    const src = await resolveSrcTenant(srcCode);
+    srcTenantId = src.tenantId;
+  }
   const tenantId = await uniqueTenantId(Tenant, name, schoolName);
   let joinCode = generateInviteCode(name);
   while (await Tenant.exists({ joinCode })) {
@@ -102,6 +109,7 @@ export const register = asyncHandler(async (req, res) => {
     isActive: false,
     expiryDate: addYears(new Date(), 1),
     joinCode,
+    ...(srcTenantId ? { srcTenantId } : {}),
   });
 
   const passwordHash = await User.hashPassword(password);

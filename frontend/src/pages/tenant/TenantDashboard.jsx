@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import { Download, Printer } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api, { getAccessToken } from '../../api/client';
@@ -38,7 +39,12 @@ const VIEWS = {
 };
 
 export default function TenantDashboard() {
+  const { hallId } = useParams();
   const { tenant } = useAuth();
+  const monitor = Boolean(hallId);
+  const isSrc = tenant?.subscriptionPlan === 'src';
+  const canReview = !monitor && !isSrc;
+  const hallApi = monitor ? `/api/src/halls/${hallId}` : '';
   const [data, setData] = useState(null);
   const [query, setQuery] = useState('');
   const [list, setList] = useState([]);
@@ -56,7 +62,7 @@ export default function TenantDashboard() {
   const listRequested = useRef(false);
 
   async function loadDesk() {
-    const { data: d } = await api.get('/api/dashboard');
+    const { data: d } = await api.get(monitor ? `${hallApi}/dashboard` : '/api/dashboard');
     setData(d);
     if (d.headers?.length) setHeaders((prev) => (prev.length ? prev : d.headers));
   }
@@ -66,7 +72,7 @@ export default function TenantDashboard() {
     listRequested.current = true;
     setListLoading(true);
     try {
-      const { data: d } = await api.get('/api/collections/search');
+      const { data: d } = await api.get(monitor ? `${hallApi}/search` : '/api/collections/search');
       setList(d.results || []);
       setHeaders(d.headers || []);
     } catch (err) {
@@ -79,7 +85,7 @@ export default function TenantDashboard() {
 
   async function loadExceptions() {
     try {
-      const { data } = await api.get('/api/exceptions', { params: { status: 'pending' } });
+      const { data } = await api.get(monitor ? `${hallApi}/exceptions` : '/api/exceptions', { params: { status: 'pending' } });
       setExceptions(data.exceptions || []);
     } catch (_err) {
       /* ignore */
@@ -87,9 +93,13 @@ export default function TenantDashboard() {
   }
 
   useEffect(() => {
+  useEffect(() => {
+    listRequested.current = false;
+    setList([]);
+    setView(null);
     loadDesk().catch((err) => setError(err.response?.data?.message || 'Could not load desk.'));
     loadExceptions();
-  }, []);
+  }, [hallId]);
 
   useEffect(() => {
     if (view && view !== 'complete') {
@@ -103,6 +113,7 @@ export default function TenantDashboard() {
     const socket = io(apiOrigin() || undefined, {
       auth: { token },
     });
+    if (hallId) socket.emit('src:watch', hallId);
     socket.on('collection:new', (payload) => {
       const incoming = payload.collection;
       setQuery('');
@@ -152,7 +163,7 @@ export default function TenantDashboard() {
       });
     });
     return () => socket.disconnect();
-  }, []);
+  }, [hallId]);
 
   const stats = data?.stats || { total: 0, received: 0, pending: 0, percent: 0 };
   const dist = data?.distribution;
@@ -182,16 +193,17 @@ export default function TenantDashboard() {
     { key: 'complete', label: 'Complete', value: `${stats.percent}%` },
   ];
 
-  const fileBase = `${tenant?.tenantId || 'hall'}-${dist?.title || 'list'}`.replace(/\s+/g, '-');
+  const deskTenant = data?.tenant || tenant;
+  const fileBase = `${deskTenant?.tenantId || 'hall'}-${dist?.title || 'list'}`.replace(/\s+/g, '-');
 
   function exportCurrent(mode) {
     const title = VIEWS[view]?.title || 'List';
-    if (mode === 'print') printSheet(`${tenant?.name || 'Hall'} · ${title}`, headers, visible);
+    if (mode === 'print') printSheet(`${deskTenant?.name || 'Hall'} · ${title}`, headers, visible);
     else downloadCsv(`${fileBase}-${view || 'list'}.csv`, headers, visible);
   }
 
   async function voidMark(reason) {
-    if (!voidRow) return;
+    if (!voidRow || monitor) return;
     setVoidBusy(true);
     setError('');
     try {
@@ -219,27 +231,41 @@ export default function TenantDashboard() {
     }
   }
 
+  if (monitor && tenant && !isSrc) {
+    return <Navigate to="/app" replace />;
+  }
+
   return (
     <div>
       <HallHero
-        eyebrow={`${tenant?.schoolName || ''} · /${tenant?.tenantId || ''}`}
-        title={`${tenant?.name || 'Hall'} desk`}
+        eyebrow={`${deskTenant?.schoolName || ''} · /${deskTenant?.tenantId || ''}${monitor ? ' · SRC monitor' : ''}`}
+        title={`${deskTenant?.name || 'Hall'} desk`}
         subtitle={
           dist
             ? `${dist.title}${dist.itemName ? ` · ${dist.itemName}` : ''}`
             : 'No distribution yet. Create one to start sharing.'
         }
       />
+      {monitor ? (
+        <p className="mb-3 text-sm">
+          <Link to="/app/halls" className="font-semibold text-forest-700">← Campus halls</Link>
+        </p>
+      ) : null}
       {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
 
       {exceptions.length > 0 && (
         <section className="mt-6 card p-4">
           <h2 className="font-display text-2xl">Walk-ins waiting</h2>
-          <p className="text-sm text-ink/60 mt-1">Approve from the live desk so the table can serve them.</p>
+          <p className="text-sm text-ink/60 mt-1">
+            {canReview
+              ? 'Approve from the live desk so the table can serve them.'
+              : 'SRC can monitor walk-ins. Only the hall president can approve a student.'}
+          </p>
           <div className="mt-3">
             <ExceptionPanel
               items={exceptions}
-              canReview
+              canReview={canReview}
+              photoBase={monitor ? `${hallApi}/exceptions` : '/api/exceptions'}
               busyId={exceptionBusy}
               onApprove={async (row, markReceived) => {
                 setExceptionBusy(row.id);
@@ -335,8 +361,8 @@ export default function TenantDashboard() {
                   setSortKey(key);
                   setSortDir(dir);
                 }}
-                showVoid
-                onVoid={setVoidRow}
+                showVoid={!monitor}
+                onVoid={monitor ? undefined : setVoidRow}
                 emptyMessage={needle ? 'No student matched that search.' : VIEWS[view].empty}
               />
             )}

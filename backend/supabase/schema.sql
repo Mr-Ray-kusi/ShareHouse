@@ -19,6 +19,7 @@ create table if not exists public.tenants (
   "paystackReference" text not null default '',
   "lastPaymentAt" timestamptz,
   "joinCode" text,
+  "srcTenantId" text,
   "createdAt" timestamptz not null default now(),
   "updatedAt" timestamptz not null default now()
 );
@@ -26,6 +27,7 @@ create table if not exists public.tenants (
 create unique index if not exists tenants_join_code_uidx
   on public.tenants ("joinCode")
   where "joinCode" is not null;
+create index if not exists tenants_src_tenant_idx on public.tenants ("srcTenantId");
 
 create table if not exists public.users (
   id uuid primary key default gen_random_uuid(),

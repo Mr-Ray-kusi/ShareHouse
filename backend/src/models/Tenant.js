@@ -18,6 +18,7 @@ export const Tenant = createModel({
     'paystackReference',
     'lastPaymentAt',
     'joinCode',
+    'srcTenantId',
     'createdAt',
     'updatedAt',
   ],

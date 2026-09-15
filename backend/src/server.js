@@ -14,6 +14,8 @@ import { telemetryMiddleware } from './services/telemetry.js';
 import { ensureSuperAdmin } from './scripts/seedSuperAdmin.js';
 import { getSb } from './db/supabase.js';
 import { verifyAccessToken } from './utils/tokens.js';
+import { Tenant } from './models/index.js';
+import { listHallsForSrc } from './utils/srcHalls.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -47,6 +49,18 @@ io.on('connection', (socket) => {
   const tenantId = socket.user?.tenantId;
   if (tenantId) socket.join(`tenant:${tenantId}`);
   if (socket.user?.role === 'super_admin') socket.join('super');
+  socket.on('src:watch', async (hallTenantId) => {
+    try {
+      if (socket.user?.role !== 'tenant_admin' || !socket.user?.tenantId) return;
+      const src = await Tenant.findOne({ tenantId: socket.user.tenantId });
+      if (src?.subscriptionPlan !== 'src') return;
+      const halls = await listHallsForSrc(src);
+      const hall = halls.find((row) => row.tenantId === String(hallTenantId || '').trim());
+      if (hall) socket.join(`tenant:${hall.tenantId}`);
+    } catch (_err) {
+      /* ignore watch errors */
+    }
+  });
 });
 
 app.set('io', io);

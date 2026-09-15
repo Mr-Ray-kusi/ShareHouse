@@ -12,6 +12,7 @@ import ExceptionPanel, { reviewWalkIn } from '../../components/ExceptionPanel';
 export default function DistributionDetail() {
   const { id } = useParams();
   const { tenant, supportMode } = useAuth();
+  const isSrc = tenant?.subscriptionPlan === 'src';
   const [dist, setDist] = useState(null);
   const [list, setList] = useState([]);
   const [headers, setHeaders] = useState([]);
@@ -198,11 +199,15 @@ export default function DistributionDetail() {
       {pendingWalkIns.length > 0 && !supportMode && (
         <section className="mt-8">
           <h2 className="font-display text-2xl">Walk-ins waiting</h2>
-          <p className="text-sm text-ink/60 mt-1">Approve only if you are sure they should collect.</p>
+          <p className="text-sm text-ink/60 mt-1">
+            {isSrc
+              ? 'SRC can monitor walk-ins. Only the hall president can approve a student.'
+              : 'Approve only if you are sure they should collect.'}
+          </p>
           <div className="mt-3">
             <ExceptionPanel
               items={pendingWalkIns}
-              canReview
+              canReview={!supportMode && !isSrc}
               busyId={exceptionBusy}
               onApprove={async (row, markReceived) => {
                 setExceptionBusy(row.id);
