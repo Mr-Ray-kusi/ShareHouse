@@ -3,7 +3,6 @@ import { Collection, Distribution, Tenant, User, Beneficiary, SheetUpload, Syste
 import { addYears } from '../utils/codes.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { storedUploadPath, storedFileExists, workbookFromBeneficiaries } from '../utils/uploads.js';
-import { createPresidentUser, serializePresident, serializeStaffAccount } from '../utils/presidents.js';
 
 function sendExcel(res, buffer, filename) {
   const safe = String(filename || 'list.xlsx').replace(/[^\w.\- ()]/g, '_');
@@ -126,9 +125,9 @@ export const getTenant = asyncHandler(async (req, res) => {
   if (!tenant) return res.status(404).json({ message: 'Tenant not found.' });
 
   const [admins, assistants, hallAdmins, porters, distributions, collections, uploads] = await Promise.all([
-    User.find({ tenantId: tenant.tenantId, role: 'tenant_admin' }).sort({ createdAt: -1 }),
+    User.find({ tenantId: tenant.tenantId, role: 'tenant_admin' }).select('-passwordHash -refreshTokens'),
     User.find({ tenantId: tenant.tenantId, role: 'assistant' }).select('-passwordHash -refreshTokens'),
-    User.find({ tenantId: tenant.tenantId, role: 'hall_admin' }).sort({ createdAt: -1 }),
+    User.find({ tenantId: tenant.tenantId, role: 'hall_admin' }).select('-passwordHash -refreshTokens'),
     User.find({ tenantId: tenant.tenantId, role: 'porter' }).select('-passwordHash -refreshTokens'),
     Distribution.find({ tenantId: tenant.tenantId }).sort({ createdAt: -1 }),
     Collection.countDocuments({ tenantId: tenant.tenantId }),
@@ -137,9 +136,9 @@ export const getTenant = asyncHandler(async (req, res) => {
 
   res.json({
     tenant,
-    admins: admins.map((row) => serializeStaffAccount(row, tenant, { includePassword: true })),
+    admins,
     assistants,
-    hallAdmins: hallAdmins.map((row) => serializeStaffAccount(row, tenant)),
+    hallAdmins,
     porters,
     distributions,
     collectionCount: collections,
@@ -165,87 +164,51 @@ export const setTenantActive = asyncHandler(async (req, res) => {
   }
   await tenant.save();
 
-  if (!wantActive) {
-    const staff = await User.find({ tenantId: tenant.tenantId });
-    for (const admin of staff) {
-      if (admin.role === 'super_admin') continue;
-      admin.refreshTokens = [];
-      await admin.save();
-    }
+  const presidents = await User.find({ tenantId: tenant.tenantId, role: 'tenant_admin' });
+  const hallAdmins = await User.find({ tenantId: tenant.tenantId, role: 'hall_admin' });
+  const staff = [...presidents, ...hallAdmins];
+  for (const admin of staff) {
+    admin.isActive = wantActive;
+    if (!wantActive) admin.refreshTokens = [];
+    await admin.save();
   }
 
   res.json({
     tenant,
     message: tenant.isActive
-      ? 'Hall approved. Approve each hall administrator and hall president account separately so they can sign in.'
-      : 'Hall deactivated. Staff logins are blocked until the hall is approved again.',
+      ? 'Hall approved. The hall admin can now sign in.'
+      : 'Hall deactivated. Hall admin logins are blocked.',
   });
 });
 
-export const listAccounts = asyncHandler(async (req, res) => {
-  const [users, tenants] = await Promise.all([
-    User.find({ role: { $in: ['hall_admin', 'tenant_admin'] } }).sort({ createdAt: -1 }),
-    Tenant.find().select('tenantId name schoolName isActive lastPaymentAt').lean(),
-  ]);
-  const halls = new Map(tenants.map((t) => [t.tenantId, t]));
-  const accounts = users.map((user) => serializeStaffAccount(user, halls.get(user.tenantId), {
-    includePassword: user.role === 'tenant_admin',
-  }));
-  res.json({
-    accounts,
-    pending: accounts.filter((row) => row.pendingApproval).length,
-    tenants: tenants.map((t) => ({
-      tenantId: t.tenantId,
-      name: t.name,
-      schoolName: t.schoolName,
-      isActive: t.isActive,
-      lastPaymentAt: t.lastPaymentAt,
-    })),
-  });
-});
-
-export const setUserActive = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id);
-  if (!user || !['hall_admin', 'tenant_admin'].includes(user.role)) {
-    return res.status(404).json({ message: 'Account not found.' });
-  }
-  const wantActive = Boolean(req.body?.isActive);
-  user.isActive = wantActive;
-  if (wantActive) {
-    user.approvedAt = user.approvedAt || new Date();
-  } else {
-    user.refreshTokens = [];
-  }
-  await user.save();
-  const tenant = user.tenantId ? await Tenant.findOne({ tenantId: user.tenantId }) : null;
-  res.json({
-    account: serializeStaffAccount(user, tenant, { includePassword: user.role === 'tenant_admin' }),
-    message: wantActive ? 'Account approved.' : 'Account deactivated.',
-  });
-});
-
-export const deleteUserAccount = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id);
-  if (!user || !['hall_admin', 'tenant_admin'].includes(user.role)) {
-    return res.status(404).json({ message: 'Account not found.' });
-  }
-  await User.deleteMany({ _id: user.id });
-  res.json({ message: 'Account deleted.' });
-});
-
-export const createPresident = asyncHandler(async (req, res) => {
+export const createHallAdmin = asyncHandler(async (req, res) => {
   const tenant = await Tenant.findOne({ tenantId: req.params.tenantId });
   if (!tenant) return res.status(404).json({ message: 'Hall not found.' });
-  const user = await createPresidentUser({
+  const name = String(req.body?.name || '').trim();
+  const email = String(req.body?.email || '').toLowerCase().trim();
+  const password = String(req.body?.password || '').trim();
+  if (!name || !email || !password) {
+    return res.status(400).json({ message: 'Name, email, and password are required.' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+  }
+  const existing = await User.findOne({ email });
+  if (existing) {
+    return res.status(409).json({ message: 'An account with this email already exists.' });
+  }
+  const user = await User.create({
     tenantId: tenant.tenantId,
-    name: req.body?.name || req.body?.label,
-    password: req.body?.password,
-    createdByRole: 'super_admin',
+    name,
+    email,
+    phone: tenant.adminPhone || '',
+    passwordHash: await User.hashPassword(password),
+    role: 'hall_admin',
     isActive: true,
   });
   res.status(201).json({
-    president: serializePresident(user, { includePassword: true }),
-    message: 'Hidden hall president created. Hall administration cannot see this login.',
+    hallAdmin: user.toSafeJSON(),
+    message: 'Hall administrator created. They sign in on the same login page, then open the lodge.',
   });
 });
 

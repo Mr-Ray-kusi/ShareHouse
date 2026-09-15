@@ -13,22 +13,17 @@ export const User = createModel({
     'role',
     'isActive',
     'inviteId',
-    'passwordPlain',
-    'createdByRole',
-    'approvedAt',
     'refreshTokens',
     'lastLogin',
     'createdAt',
     'updatedAt',
   ],
   uuidFields: ['inviteId'],
-  dateFields: ['approvedAt', 'lastLogin', 'createdAt', 'updatedAt'],
+  dateFields: ['lastLogin', 'createdAt', 'updatedAt'],
   jsonFields: ['refreshTokens'],
   prepare(doc) {
     if (doc.email) doc.email = String(doc.email).toLowerCase().trim();
     if (doc.email === '') doc.email = null;
-    if (doc.passwordPlain == null) doc.passwordPlain = '';
-    if (doc.createdByRole == null) doc.createdByRole = '';
     if (!doc.refreshTokens) doc.refreshTokens = [];
   },
   statics: {
@@ -49,8 +44,6 @@ export const User = createModel({
         phone: this.phone || '',
         role: this.role,
         isActive: this.isActive,
-        createdByRole: this.createdByRole || '',
-        approvedAt: this.approvedAt || null,
         lastLogin: this.lastLogin,
         createdAt: this.createdAt,
       };

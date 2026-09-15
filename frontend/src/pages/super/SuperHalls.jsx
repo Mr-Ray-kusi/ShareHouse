@@ -37,7 +37,7 @@ export default function SuperHalls() {
       <PageIntro
         kicker="Halls"
         title="Registered Halls"
-        subtitle="Approve a hall after Paystack payment. Then approve each hall administrator and hall president account on Staff accounts."
+        subtitle="Approve a hall after Paystack payment to turn on its login. Super admin does not enter live desks, distributions, or assistant tables."
       />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div className="desk-card p-4">
@@ -96,7 +96,7 @@ export default function SuperHalls() {
                         title={!paid ? 'Hall must pay with Paystack before approval' : ''}
                         onClick={() => toggle(t, !t.isActive)}
                       >
-                        {t.isActive ? 'Deactivate hall' : 'Approve hall'}
+                        {t.isActive ? 'Deactivate' : 'Approve login'}
                       </button>
                     </td>
                   </tr>

@@ -14,8 +14,7 @@ import {
 import { initializePayment } from '../services/paystackService.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { track } from '../services/telemetry.js';
-import { foldSearch, namesMatch } from '../utils/search.js';
-import { findPresidentByCredentials } from '../utils/presidents.js';
+import { namesMatch } from '../utils/search.js';
 
 function setRefreshCookie(res, token) {
   res.cookie('ws_refresh', token, refreshCookieOptions());
@@ -63,7 +62,7 @@ export const register = asyncHandler(async (req, res) => {
 
   const existingUser = await User.findOne({ email: String(adminEmail).toLowerCase() });
   if (existingUser) {
-    if (['hall_admin', 'tenant_admin'].includes(existingUser.role) && existingUser.tenantId && (await existingUser.comparePassword(password))) {
+    if (existingUser.role === 'tenant_admin' && existingUser.tenantId && (await existingUser.comparePassword(password))) {
       const existingTenant = await Tenant.findOne({ tenantId: existingUser.tenantId });
       if (existingTenant && !existingTenant.lastPaymentAt) {
         const callbackUrl = `${env.frontendUrl}/payment/callback?tenant=${existingTenant.tenantId}`;
@@ -112,8 +111,7 @@ export const register = asyncHandler(async (req, res) => {
     email: tenant.adminEmail,
     phone: tenant.adminPhone,
     passwordHash,
-    role: 'hall_admin',
-    createdByRole: 'self',
+    role: 'tenant_admin',
     isActive: false,
   });
 
@@ -144,131 +142,16 @@ export const register = asyncHandler(async (req, res) => {
   });
 });
 
-function looksLikeEmail(value) {
-  return /@/.test(String(value || ''));
-}
-
-async function findTenantByHallKey(hallKey) {
-  const raw = String(hallKey || '').trim();
-  if (!raw) return null;
-  return (
-    await Tenant.findOne({ tenantId: raw.toLowerCase() })
-    || await Tenant.findOne({ tenantId: raw })
-    || await Tenant.findOne({ joinCode: raw.toUpperCase() })
-  );
-}
-
-function staffLoginBlock(user, tenant) {
-  if (!tenant) {
-    return { status: 404, body: { message: 'Hall not found for this account.' } };
-  }
-  if (!tenant.lastPaymentAt) {
-    return {
-      status: 402,
-      body: {
-        message: 'Complete Paystack payment before this hall can be reviewed.',
-        code: 'PAYMENT_REQUIRED',
-        tenantId: tenant.tenantId,
-      },
-    };
-  }
-  if (!tenant.isActive) {
-    return {
-      status: 403,
-      body: {
-        message: 'Payment received. A system admin must approve this hall before you can sign in.',
-        code: 'PENDING_HALL_APPROVAL',
-      },
-    };
-  }
-  if (!tenant.hasAccess()) {
-    return {
-      status: 403,
-      body: {
-        message: 'This hall subscription has expired. Renew to continue.',
-        code: 'SUBSCRIPTION_EXPIRED',
-      },
-    };
-  }
-  if (!user.isActive) {
-    const pending = !user.approvedAt;
-    return {
-      status: 403,
-      body: {
-        message: pending
-          ? 'A system admin must approve this account before you can sign in.'
-          : 'This account has been deactivated.',
-        code: pending ? 'PENDING_ACCOUNT_APPROVAL' : 'ACCOUNT_INACTIVE',
-      },
-    };
-  }
-  return null;
-}
-
 export const login = asyncHandler(async (req, res) => {
-  const { desk, email, password, hall, name } = req.body || {};
-  const deskRole = String(desk || '').trim();
-  const isPresidentDesk = deskRole === 'tenant_admin' || deskRole === 'president' || deskRole === 'hall_president';
-  const isAdminDesk = deskRole === 'hall_admin' || deskRole === 'admin';
+  const { email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required.' });
+  }
 
-  let user = null;
-
-  if (isPresidentDesk) {
-    const hallKey = String(hall || '').trim() || String(email || '').trim();
-    const presidentName = String(name || '').trim();
-    if (!password) {
-      return res.status(400).json({ message: 'Hall ID, president name, and password are required.' });
-    }
-    if (looksLikeEmail(hallKey)) {
-      user = await User.findOne({ email: hallKey.toLowerCase() });
-      if (
-        !user
-        || user.role !== 'tenant_admin'
-        || !(await user.comparePassword(password))
-        || (presidentName && !namesMatch(presidentName, user.name) && foldSearch(presidentName) !== foldSearch(user.name))
-      ) {
-        track({ pillar: 'audience', name: 'login_fail' });
-        return res.status(401).json({ message: 'Invalid hall president credentials.' });
-      }
-    } else {
-      if (!hallKey || !presidentName) {
-        return res.status(400).json({ message: 'Hall ID, president name, and password are required.' });
-      }
-      const tenantMatch = await findTenantByHallKey(hallKey);
-      if (!tenantMatch) {
-        track({ pillar: 'audience', name: 'login_fail' });
-        return res.status(401).json({ message: 'Invalid hall president credentials.' });
-      }
-      user = await findPresidentByCredentials(tenantMatch, presidentName, password);
-      if (!user) {
-        track({ pillar: 'audience', name: 'login_fail' });
-        return res.status(401).json({ message: 'Invalid hall president credentials.' });
-      }
-    }
-  } else {
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required.' });
-    }
-    user = await User.findOne({ email: String(email).toLowerCase() });
-    if (!user || !(await user.comparePassword(password))) {
-      track({ pillar: 'audience', name: 'login_fail' });
-      return res.status(401).json({ message: 'Invalid email or password.' });
-    }
-    if (isAdminDesk && user.role === 'tenant_admin') {
-      return res.status(403).json({
-        message: 'Select Hall president, then sign in with the hall ID, name, and password from hall administration.',
-      });
-    }
-    if (isAdminDesk && user.role !== 'hall_admin' && user.role !== 'super_admin') {
-      return res.status(403).json({
-        message: user.role === 'assistant' || user.role === 'porter'
-          ? 'Use the join link for this role, not the hall administrator form.'
-          : 'This account is not a hall administrator.',
-      });
-    }
-    if (!isAdminDesk && !deskRole && user.role === 'tenant_admin') {
-      // Legacy email login for existing presidents.
-    }
+  const user = await User.findOne({ email: String(email).toLowerCase() });
+  if (!user || !(await user.comparePassword(password))) {
+    track({ pillar: 'audience', name: 'login_fail' });
+    return res.status(401).json({ message: 'Invalid email or password.' });
   }
 
   let tenant = null;
@@ -276,9 +159,35 @@ export const login = asyncHandler(async (req, res) => {
     tenant = await Tenant.findOne({ tenantId: user.tenantId });
   }
 
-  if (user.role === 'tenant_admin' || user.role === 'hall_admin') {
-    const blocked = staffLoginBlock(user, tenant);
-    if (blocked) return res.status(blocked.status).json(blocked.body);
+  if (user.role === 'tenant_admin') {
+    if (!tenant) {
+      return res.status(404).json({ message: 'Hall not found for this account.' });
+    }
+    if (!tenant.lastPaymentAt) {
+      return res.status(402).json({
+        message: 'Complete Paystack payment before this hall can be reviewed.',
+        code: 'PAYMENT_REQUIRED',
+        tenantId: tenant.tenantId,
+      });
+    }
+    if (!tenant.isActive || !user.isActive) {
+      return res.status(403).json({
+        message: 'Payment received. A system admin must approve this hall before you can sign in.',
+        code: 'PENDING_APPROVAL',
+      });
+    }
+  }
+
+  if (user.role === 'hall_admin') {
+    if (!tenant) {
+      return res.status(404).json({ message: 'Hall not found for this account.' });
+    }
+    if (!tenant.hasAccess()) {
+      return res.status(403).json({
+        message: 'This hall is not active yet. Lodge access opens after payment and system admin approval.',
+        code: 'LODGE_HALL_INACTIVE',
+      });
+    }
   }
 
   if (!user.isActive) {
