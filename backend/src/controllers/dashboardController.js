@@ -1,22 +1,24 @@
 import { Collection, Distribution, Tenant, User, ListException } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { getActiveDistribution } from '../services/activeDistribution.js';
+import { liveStatsForDistribution } from '../services/listService.js';
 
 export const tenantDashboard = asyncHandler(async (req, res) => {
   const dist =
     (req.query.distributionId
       ? await Distribution.findOne({ _id: req.query.distributionId, tenantId: req.tenantId })
       : null) ||
-    (await getActiveDistribution(req.tenantId)) ||
+    (await Distribution.findOne({ tenantId: req.tenantId, status: 'active' })) ||
     (await Distribution.findOne({ tenantId: req.tenantId }).sort({ createdAt: -1 }));
 
-  const [assistantCount, distributionCount, marks, pendingExceptions] = await Promise.all([
+  const distributionId = dist?._id || dist?.id;
+
+  const [assistantCount, distributionCount, marks, pendingExceptions, stats] = await Promise.all([
     User.countDocuments({ tenantId: req.tenantId, role: 'assistant', isActive: true }),
     Distribution.countDocuments({ tenantId: req.tenantId }),
     dist
       ? Collection.find({
         tenantId: req.tenantId,
-        distributionId: dist._id,
+        distributionId,
       })
         .sort({ collectedAt: -1 })
         .limit(50)
@@ -25,16 +27,17 @@ export const tenantDashboard = asyncHandler(async (req, res) => {
     dist
       ? ListException.countDocuments({
         tenantId: req.tenantId,
-        distributionId: dist._id,
+        distributionId,
         status: 'pending',
       })
       : Promise.resolve(0),
+    liveStatsForDistribution(req.tenantId, dist),
   ]);
 
   let activity = [];
-  let stats = { total: 0, received: 0, pending: 0, percent: 0 };
-
   if (dist) {
+    dist.beneficiaryCount = stats.total;
+    dist.receivedCount = stats.received;
     activity = marks.map((item) => ({
       ...item,
       id: String(item._id),
@@ -46,15 +49,6 @@ export const tenantDashboard = asyncHandler(async (req, res) => {
         'Full Name': item.beneficiaryName,
       },
     }));
-
-    stats = {
-      total: dist.beneficiaryCount,
-      received: dist.receivedCount,
-      pending: Math.max(0, dist.beneficiaryCount - dist.receivedCount),
-      percent: dist.beneficiaryCount
-        ? Math.round((dist.receivedCount / dist.beneficiaryCount) * 100)
-        : 0,
-    };
   }
 
   res.json({

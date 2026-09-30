@@ -31,6 +31,21 @@ function activityRow(item) {
   };
 }
 
+function deskStats(raw) {
+  const total = Number(raw?.total);
+  const received = Number(raw?.received);
+  const pending = Number(raw?.pending);
+  const percent = Number(raw?.percent);
+  const safeTotal = Number.isFinite(total) ? total : 0;
+  const safeReceived = Number.isFinite(received) ? received : 0;
+  return {
+    total: safeTotal,
+    received: safeReceived,
+    pending: Number.isFinite(pending) ? pending : Math.max(0, safeTotal - safeReceived),
+    percent: Number.isFinite(percent) ? percent : (safeTotal ? Math.round((safeReceived / safeTotal) * 100) : 0),
+  };
+}
+
 const VIEWS = {
   all: { title: 'On the list', empty: 'No students on this list yet.' },
   received: { title: 'Received', empty: 'No one has received yet.' },
@@ -63,7 +78,7 @@ export default function TenantDashboard() {
 
   async function loadDesk() {
     const { data: d } = await api.get(monitor ? `${hallApi}/dashboard` : '/api/dashboard');
-    setData(d);
+    setData({ ...d, stats: deskStats(d.stats) });
     if (d.headers?.length) setHeaders((prev) => (prev.length ? prev : d.headers));
   }
 
@@ -120,7 +135,7 @@ export default function TenantDashboard() {
         if (!prev) return prev;
         const row = activityRow(incoming);
         const activity = [row, ...(prev.activity || []).filter((a) => String(a.id || a._id) !== String(row.id))].slice(0, 50);
-        return { ...prev, stats: payload.stats, activity };
+        return { ...prev, stats: deskStats(payload.stats || prev.stats), activity };
       });
       setList((prev) =>
         prev.map((row) =>
@@ -137,7 +152,7 @@ export default function TenantDashboard() {
           String(a.beneficiaryId || '') !== String(payload.beneficiaryId)
           && String(a.id || a._id) !== String(payload.collectionId)
         ));
-        return { ...prev, stats: payload.stats || prev.stats, activity };
+        return { ...prev, stats: deskStats(payload.stats || prev.stats), activity };
       });
       setList((prev) =>
         prev.map((row) =>
@@ -164,7 +179,7 @@ export default function TenantDashboard() {
     return () => socket.disconnect();
   }, [hallId]);
 
-  const stats = data?.stats || { total: 0, received: 0, pending: 0, percent: 0 };
+  const stats = deskStats(data?.stats);
   const dist = data?.distribution;
   const needle = query.trim();
   const activityRows = useMemo(
@@ -213,7 +228,7 @@ export default function TenantDashboard() {
         const activity = (prev.activity || []).filter((a) => (
           String(a.beneficiaryId || a.id) !== String(beneficiaryId)
         ));
-        return { ...prev, stats: data.stats || prev.stats, activity };
+        return { ...prev, stats: deskStats(data.stats || prev.stats), activity };
       });
       setList((prev) =>
         prev.map((row) =>
@@ -307,7 +322,7 @@ export default function TenantDashboard() {
               className={`card p-4 text-left transition ${active ? 'ring-2 ring-forest-600 bg-forest-50' : 'hover:bg-mist/80'}`}
             >
               <p className="text-xs uppercase tracking-widest text-forest-700/70">{card.label}</p>
-              <p className="font-display text-3xl mt-1">{card.value}</p>
+              <p className="font-display text-3xl mt-1 text-ink tabular-nums leading-none">{card.value}</p>
             </button>
           );
         })}

@@ -345,14 +345,26 @@ export async function findDuplicateIndex(tenantId, distributionId, studentIndex,
 }
 
 export function statsFromDist(dist) {
-  const total = dist?.beneficiaryCount || 0;
-  const received = dist?.receivedCount || 0;
+  const total = Number(dist?.beneficiaryCount) || 0;
+  const received = Number(dist?.receivedCount) || 0;
   return {
     total,
     received,
     pending: Math.max(0, total - received),
     percent: total ? Math.round((received / total) * 100) : 0,
   };
+}
+
+export async function liveStatsForDistribution(tenantId, dist) {
+  const distributionId = dist?._id || dist?.id;
+  if (!tenantId || !distributionId) {
+    return { total: 0, received: 0, pending: 0, percent: 0 };
+  }
+  const [total, received] = await Promise.all([
+    Beneficiary.countDocuments({ tenantId, distributionId }),
+    Collection.countDocuments({ tenantId, distributionId }),
+  ]);
+  return statsFromDist({ beneficiaryCount: total, receivedCount: received });
 }
 
 export function presentBeneficiary(b, mark, headers) {

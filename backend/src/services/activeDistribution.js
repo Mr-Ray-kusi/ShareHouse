@@ -39,13 +39,13 @@ export async function bumpReceivedCount(dist) {
       updatedAt: new Date().toISOString(),
     })
     .eq('id', id)
-    .select('beneficiaryCount, receivedCount')
+    .select()
     .single();
   if (error) throw dbError(error);
   const updated = {
     ...dist,
-    beneficiaryCount: data.beneficiaryCount,
-    receivedCount: data.receivedCount,
+    beneficiaryCount: Number(data?.beneficiaryCount ?? dist.beneficiaryCount) || 0,
+    receivedCount: Number(data?.receivedCount ?? next) || 0,
   };
   if (dist.tenantId) rememberActiveDistribution(dist.tenantId, updated);
   return updated;
