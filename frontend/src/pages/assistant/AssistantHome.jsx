@@ -129,19 +129,25 @@ export default function AssistantHome() {
     try {
       const { data } = await api.get('/api/collections/search', { params: { q: needle } });
       if (seq !== searchSeq.current) return;
+      const rows = await mergeQueued(data.results || []);
+      if (seq !== searchSeq.current) return;
       setDistribution(data.distribution);
       setHeaders(data.headers || []);
-      setList(await mergeQueued(data.results || []));
+      setList(rows);
       setSearched(true);
+      if (rows.length) setQ('');
     } catch (err) {
       if (seq !== searchSeq.current) return;
       if (isNetworkError(err)) {
         const pack = await getPack();
         const local = searchPack(pack, needle);
+        const rows = await mergeQueued(local);
+        if (seq !== searchSeq.current) return;
         setDistribution(pack?.distribution || null);
         setHeaders(pack?.headers || headers);
-        setList(await mergeQueued(local));
+        setList(rows);
         setSearched(true);
+        if (rows.length) setQ('');
         if (!pack) setError('Offline and no saved hall list yet. Connect once to download it.');
       } else {
         setList([]);
