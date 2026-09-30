@@ -1,4 +1,3 @@
-import nodemailer from 'nodemailer';
 import { env } from '../config/env.js';
 
 let transporter;
@@ -13,8 +12,10 @@ function fromAddress() {
   return 'ShareHouse <noreply@sharehouse.app>';
 }
 
-function getTransporter() {
+async function getTransporter() {
   if (!transporter) {
+    const mod = await import('nodemailer');
+    const nodemailer = mod.default || mod;
     transporter = nodemailer.createTransport({
       host: env.smtpHost,
       port: env.smtpPort,
@@ -36,7 +37,8 @@ export async function sendMail({ to, subject, text, html }) {
     err.status = 503;
     throw err;
   }
-  await getTransporter().sendMail({
+  const mailer = await getTransporter();
+  await mailer.sendMail({
     from: fromAddress(),
     to,
     subject,

@@ -90,6 +90,12 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+function health(_req, res) {
+  res.json({ ok: true, service: 'sharehouse-api', time: new Date().toISOString() });
+}
+app.get('/', health);
+app.get('/health', health);
+
 app.use('/api', limiter);
 app.use(telemetryMiddleware);
 
@@ -106,16 +112,47 @@ app.use('/api', routes);
 app.use(notFound);
 app.use(errorHandler);
 
+function listen() {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(env.port, () => {
+      server.removeListener('error', reject);
+      console.log(`ShareHouse API on port ${env.port}`);
+      resolve();
+    });
+  });
+}
+
+async function connectWithRetry() {
+  let lastErr;
+  for (let attempt = 1; attempt <= 6; attempt += 1) {
+    try {
+      await connectDb();
+      return true;
+    } catch (err) {
+      lastErr = err;
+      console.error(`Supabase connect attempt ${attempt} failed: ${err.message}`);
+      await new Promise((resolve) => setTimeout(resolve, Math.min(2000 * attempt, 8000)));
+    }
+  }
+  console.error('API is listening, but Supabase is not ready yet.', lastErr?.message || '');
+  return false;
+}
+
 async function start() {
-  await connectDb();
-  server.listen(env.port, () => {
-    console.log(`ShareHouse API on port ${env.port}`);
-  });
-  ensureSuperAdmin().catch((err) => {
-    console.error('Super admin seed failed', err.message);
-  });
+  await listen();
+  const connected = await connectWithRetry();
+  if (connected) {
+    ensureSuperAdmin().catch((err) => {
+      console.error('Super admin seed failed', err.message);
+    });
+  }
   setInterval(() => {
-    getSb().from('tenants').select('id').limit(1).then(() => {}).catch(() => {});
+    try {
+      getSb().from('tenants').select('id').limit(1).then(() => {}).catch(() => {});
+    } catch (_err) {
+      /* env not ready */
+    }
   }, 4 * 60 * 1000);
 }
 
