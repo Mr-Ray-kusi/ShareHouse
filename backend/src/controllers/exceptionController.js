@@ -10,6 +10,7 @@ import {
   findDuplicateIndex,
   presentBeneficiary,
   refreshDistributionCounts,
+  resolveListHeaders,
 } from '../services/listService.js';
 import { createCollectionMark } from '../services/collectionService.js';
 
@@ -30,18 +31,28 @@ function parseSheetRow(body) {
   }
 }
 
-function listHeaders(dist) {
-  return dist?.sheetHeaders?.length ? dist.sheetHeaders : defaultHeaders();
+async function listHeaders(dist) {
+  if (!dist) return defaultHeaders();
+  const saved = (dist.sheetHeaders || []).filter(Boolean);
+  const defaults = defaultHeaders();
+  if (saved.length && saved.join('|') !== defaults.join('|')) {
+    return resolveListHeaders(saved, []);
+  }
+  const sample = await Beneficiary.find({
+    tenantId: dist.tenantId,
+    distributionId: dist._id,
+  }).select('sheetRow').limit(80);
+  return resolveListHeaders(dist.sheetHeaders, sample);
 }
 
-function mappedWalkIn(body, dist) {
+function mappedWalkIn(body, headers) {
   return beneficiaryPayload({
     studentIndex: body?.studentIndex,
     fullName: body?.fullName,
     level: body?.level,
     phone: body?.phone,
     sheetRow: parseSheetRow(body),
-  }, listHeaders(dist));
+  }, headers);
 }
 
 function presentException(row) {
@@ -98,7 +109,8 @@ export const createException = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'No active distribution. Ask the hall president to start one.' });
   }
 
-  const mapped = mappedWalkIn(req.body, dist);
+  const headers = await listHeaders(dist);
+  const mapped = mappedWalkIn(req.body, headers);
   const reason = String(req.body?.reason || '').trim();
   if (mapped.fullName.length < 2) {
     return res.status(400).json({ message: 'Student name is required.' });
@@ -127,7 +139,7 @@ export const createException = asyncHandler(async (req, res) => {
   if (alreadyOnList && !String(studentIndex).startsWith('WALK-')) {
     return res.status(409).json({
       message: `${studentIndex} is already on the list as ${alreadyOnList.fullName}. Search that ID instead.`,
-      beneficiary: presentBeneficiary(alreadyOnList, null, listHeaders(dist)),
+      beneficiary: presentBeneficiary(alreadyOnList, null, headers),
     });
   }
 
@@ -214,7 +226,7 @@ export const reviewException = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'This distribution is not active.' });
   }
 
-  const headers = listHeaders(dist);
+  const headers = await listHeaders(dist);
   let beneficiary = await findDuplicateIndex(req.tenantId, dist._id, row.studentIndex);
   const linkedExisting = Boolean(beneficiary);
   if (!beneficiary) {
@@ -230,7 +242,7 @@ export const reviewException = asyncHandler(async (req, res) => {
       distributionId: dist._id,
       ...payload,
     });
-    if (!dist.sheetHeaders?.length) dist.sheetHeaders = headers;
+    if ((dist.sheetHeaders || []).join('|') !== headers.join('|')) dist.sheetHeaders = headers;
     await refreshDistributionCounts(dist);
   }
 

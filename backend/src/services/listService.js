@@ -109,24 +109,105 @@ export function composeFullName(sheetRow = {}, roles = {}) {
     .trim();
 }
 
-export function mergeHeaders(existing = [], incoming = []) {
-  const out = [];
-  for (const h of [...(existing || []), ...(incoming || [])]) {
-    if (h && !out.includes(h)) out.push(h);
+function sameHeaderList(a = [], b = []) {
+  return (a || []).join('|') === (b || []).join('|');
+}
+
+export function headersFromSheetRows(rows = []) {
+  const seen = [];
+  for (const item of rows || []) {
+    const sheet = item?.sheetRow && typeof item.sheetRow === 'object' ? item.sheetRow : {};
+    for (const key of Object.keys(sheet)) {
+      if (key && !seen.includes(key)) seen.push(key);
+    }
   }
-  return out.length ? out : defaultHeaders();
+  return seen;
+}
+
+function stripDuplicateDefaultHeaders(headers = [], rows = []) {
+  const defaults = defaultHeaders();
+  const custom = (headers || []).filter((header) => !defaults.includes(header));
+  if (!custom.length) return headers;
+  const customRoles = classifySheetHeaders(custom);
+  const defaultRoles = classifySheetHeaders(defaults);
+  const fromRows = headersFromSheetRows(rows);
+  return headers.filter((header) => {
+    if (!defaults.includes(header)) return true;
+    for (const role of ['index', 'name', 'level', 'phone']) {
+      if (defaultRoles[role] !== header) continue;
+      if (customRoles[role]) return false;
+      if (role === 'name' && (customRoles.lastName || customRoles.firstName)) return false;
+      if (fromRows.length && !fromRows.includes(header)) return false;
+    }
+    return true;
+  });
+}
+
+export function resolveListHeaders(stored = [], rows = []) {
+  const saved = (stored || []).filter(Boolean);
+  const fromRows = headersFromSheetRows(rows);
+  const defaults = defaultHeaders();
+  const savedIsDefault = sameHeaderList(saved, defaults);
+  const rowsAreCustom = fromRows.some((header) => !defaults.includes(header));
+  let headers;
+  if (saved.length && !(savedIsDefault && rowsAreCustom)) headers = saved;
+  else if (fromRows.length) headers = fromRows;
+  else headers = saved.length ? saved : defaults;
+  const cleaned = stripDuplicateDefaultHeaders(headers, rows);
+  return cleaned.length ? cleaned : defaults;
+}
+
+export function mergeHeaders(existing = [], incoming = []) {
+  const existingList = (existing || []).filter(Boolean);
+  const incomingList = (incoming || []).filter(Boolean);
+  const defaults = defaultHeaders();
+  const existingIsDefault = sameHeaderList(existingList, defaults);
+  const incomingIsCustom = incomingList.some((header) => !defaults.includes(header));
+  if (existingIsDefault && incomingIsCustom) {
+    return incomingList.length ? incomingList : defaults;
+  }
+  const out = [];
+  for (const header of [...existingList, ...incomingList]) {
+    if (header && !out.includes(header)) out.push(header);
+  }
+  const merged = out.length ? out : defaults;
+  const incomingAsRows = incomingList.map((header) => ({ sheetRow: { [header]: '1' } }));
+  const cleaned = stripDuplicateDefaultHeaders(merged, incomingAsRows);
+  return cleaned.length ? cleaned : defaults;
+}
+
+function remapSheetValues(incoming = {}, headers = []) {
+  const cols = headers.length ? headers : defaultHeaders();
+  const destRoles = classifySheetHeaders(cols);
+  const srcRoles = classifySheetHeaders(Object.keys(incoming || {}));
+  const mapped = { ...(incoming || {}) };
+  for (const role of ['index', 'name', 'lastName', 'firstName', 'otherName', 'level', 'phone']) {
+    const dest = destRoles[role];
+    const src = srcRoles[role];
+    if (dest && src && src !== dest && String(mapped[src] || '').trim() && !String(mapped[dest] || '').trim()) {
+      mapped[dest] = mapped[src];
+    }
+  }
+  return { mapped, roles: destRoles };
 }
 
 export function buildSheetRow({ studentIndex, fullName, level, phone, sheetRow }, headers = []) {
   const cols = headers.length ? headers : defaultHeaders();
-  const roles = classifySheetHeaders(cols);
-  const incoming = { ...(sheetRow || {}) };
-  if (roles.index && studentIndex) incoming[roles.index] = studentIndex;
-  if (roles.name && fullName) incoming[roles.name] = fullName;
-  if (roles.level && level) incoming[roles.level] = level;
-  if (roles.phone && phone) incoming[roles.phone] = phone;
+  const { mapped, roles } = remapSheetValues({ ...(sheetRow || {}) }, cols);
+  if (roles.index && studentIndex) mapped[roles.index] = studentIndex;
+  if (roles.level && level) mapped[roles.level] = level;
+  if (roles.phone && phone) mapped[roles.phone] = phone;
+  if (roles.name && fullName) mapped[roles.name] = fullName;
+  else if (fullName) {
+    const hasParts = [roles.lastName, roles.firstName, roles.otherName]
+      .some((key) => key && String(mapped[key] || '').trim());
+    if (!hasParts) {
+      if (roles.lastName) mapped[roles.lastName] = fullName;
+      else if (roles.firstName) mapped[roles.firstName] = fullName;
+    }
+  }
   const row = {};
-  for (const h of cols) row[h] = incoming[h] ?? '';
+  for (const header of cols) row[header] = mapped[header] ?? '';
   return row;
 }
 
@@ -134,14 +215,30 @@ export function beneficiaryPayload(fields, headers) {
   const cols = headers?.length ? headers : defaultHeaders();
   const roles = classifySheetHeaders(cols);
   const incomingSheet = fields.sheetRow || {};
+  const incomingRoles = classifySheetHeaders(Object.keys(incomingSheet));
   const studentIndex = normalizeStudentIndex(
-    fields.studentIndex || (roles.index ? incomingSheet[roles.index] : '')
+    fields.studentIndex
+    || (roles.index ? incomingSheet[roles.index] : '')
+    || (incomingRoles.index ? incomingSheet[incomingRoles.index] : '')
   );
   const fullName = String(
-    fields.fullName || composeFullName(incomingSheet, roles) || ''
+    fields.fullName
+    || composeFullName(incomingSheet, roles)
+    || composeFullName(incomingSheet, incomingRoles)
+    || ''
   ).trim();
-  const level = String(fields.level || (roles.level ? incomingSheet[roles.level] : '') || '').trim();
-  const phone = String(fields.phone || (roles.phone ? incomingSheet[roles.phone] : '') || '').trim();
+  const level = String(
+    fields.level
+    || (roles.level ? incomingSheet[roles.level] : '')
+    || (incomingRoles.level ? incomingSheet[incomingRoles.level] : '')
+    || ''
+  ).trim();
+  const phone = String(
+    fields.phone
+    || (roles.phone ? incomingSheet[roles.phone] : '')
+    || (incomingRoles.phone ? incomingSheet[incomingRoles.phone] : '')
+    || ''
+  ).trim();
   const sheetRow = buildSheetRow({
     studentIndex,
     fullName,
@@ -369,9 +466,13 @@ export async function liveStatsForDistribution(tenantId, dist) {
 
 export function presentBeneficiary(b, mark, headers) {
   const cols = headers?.length ? headers : defaultHeaders();
-  const sheetRow = b.sheetRow && Object.keys(b.sheetRow || {}).length
-    ? b.sheetRow
-    : buildSheetRow(b, cols);
+  const sheetRow = buildSheetRow({
+    studentIndex: b.studentIndex,
+    fullName: b.fullName,
+    level: b.level,
+    phone: b.phone,
+    sheetRow: b.sheetRow || {},
+  }, cols);
   return {
     id: String(b._id || b.id),
     studentIndex: b.studentIndex,

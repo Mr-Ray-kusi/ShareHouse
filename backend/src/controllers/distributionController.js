@@ -17,6 +17,7 @@ import {
   presentBeneficiary,
   previewListUpload,
   refreshDistributionCounts,
+  resolveListHeaders,
 } from '../services/listService.js';
 
 function truthy(value) {
@@ -40,6 +41,19 @@ async function requireDistribution(req) {
     throw err;
   }
   return dist;
+}
+
+async function headersForDistribution(dist) {
+  const saved = (dist.sheetHeaders || []).filter(Boolean);
+  const defaults = defaultHeaders();
+  if (saved.length && saved.join('|') !== defaults.join('|')) {
+    return resolveListHeaders(saved, []);
+  }
+  const sample = await Beneficiary.find({
+    tenantId: dist.tenantId,
+    distributionId: dist._id,
+  }).select('sheetRow').limit(80);
+  return resolveListHeaders(dist.sheetHeaders, sample);
 }
 
 export const listDistributions = asyncHandler(async (req, res) => {
@@ -249,7 +263,7 @@ export const uploadBeneficiaries = asyncHandler(async (req, res) => {
 
 export const addBeneficiary = asyncHandler(async (req, res) => {
   const dist = await requireDistribution(req);
-  const headers = dist.sheetHeaders?.length ? dist.sheetHeaders : defaultHeaders();
+  const headers = await headersForDistribution(dist);
   const payload = beneficiaryPayload(req.body || {}, headers);
   if (!payload.fullName) {
     return res.status(400).json({ message: 'Full name is required.' });
@@ -290,7 +304,7 @@ export const updateBeneficiary = asyncHandler(async (req, res) => {
   });
   if (!beneficiary) return res.status(404).json({ message: 'Student not found on this list.' });
 
-  const headers = dist.sheetHeaders?.length ? dist.sheetHeaders : defaultHeaders();
+  const headers = await headersForDistribution(dist);
   const next = beneficiaryPayload({
     studentIndex: req.body?.studentIndex ?? beneficiary.studentIndex,
     fullName: req.body?.fullName ?? beneficiary.fullName,
@@ -414,7 +428,7 @@ export const listBeneficiaries = asyncHandler(async (req, res) => {
     : [];
 
   const receivedMap = new Map(received.map((c) => [String(c.beneficiaryId), c]));
-  const headers = dist.sheetHeaders?.length ? dist.sheetHeaders : defaultHeaders();
+  const headers = resolveListHeaders(dist.sheetHeaders, q ? [] : items);
   const beneficiaries = items.map((b) => presentBeneficiary(b, receivedMap.get(String(b._id)), headers));
 
   res.json({

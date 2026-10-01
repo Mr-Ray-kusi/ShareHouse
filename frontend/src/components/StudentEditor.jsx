@@ -2,8 +2,10 @@ import { useMemo, useState } from 'react';
 import Modal from './Modal';
 import {
   classifySheetHeaders,
+  completeSheetRow,
   defaultSheetHeaders,
   fieldsFromSheetValues,
+  formSheetHeaders,
   requiredSheetHeaders,
 } from '../utils/sheetColumns';
 
@@ -20,6 +22,11 @@ function initialValues(student, headers) {
   if (roles.name && !values[roles.name] && student?.fullName) {
     values[roles.name] = student.fullName;
   }
+  if (!roles.name && student?.fullName) {
+    const hasParts = [roles.lastName, roles.firstName, roles.otherName]
+      .some((key) => key && String(values[key] || '').trim());
+    if (!hasParts && roles.lastName) values[roles.lastName] = student.fullName;
+  }
   if (roles.level && !values[roles.level] && student?.level) {
     values[roles.level] = student.level;
   }
@@ -30,9 +37,10 @@ function initialValues(student, headers) {
 }
 
 export default function StudentEditor({ student, headers = [], rows = [], busy, onClose, onSave }) {
-  const cols = headers.length ? headers : defaultSheetHeaders();
-  const required = useMemo(() => requiredSheetHeaders(cols, rows), [cols, rows]);
-  const [values, setValues] = useState(() => initialValues(student, cols));
+  const allCols = headers.length ? headers : defaultSheetHeaders();
+  const cols = useMemo(() => formSheetHeaders(allCols, rows, student), [allCols, rows, student]);
+  const required = useMemo(() => requiredSheetHeaders(cols, cols), [cols]);
+  const [values, setValues] = useState(() => initialValues(student, allCols));
   const editing = Boolean(student?.id);
 
   function set(header, value) {
@@ -43,7 +51,7 @@ export default function StudentEditor({ student, headers = [], rows = [], busy, 
     <Modal title={editing ? 'Edit student' : 'Add student'} onClose={busy ? undefined : onClose} wide>
       <p className="text-sm text-ink/70">
         {headers.length
-          ? 'These fields match the columns from the uploaded Excel sheet. Columns that are empty on the list are optional.'
+          ? 'Only columns that already have values on this list are shown. The student is saved on the same Excel row as everyone else.'
           : 'Upload an Excel list first if you want this form to follow your sheet columns.'}
       </p>
       {editing && student.collected ? (
@@ -55,7 +63,7 @@ export default function StudentEditor({ student, headers = [], rows = [], busy, 
         className="mt-4 space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          onSave(fieldsFromSheetValues(values, cols));
+          onSave(fieldsFromSheetValues(completeSheetRow(values, allCols), allCols));
         }}
       >
         {cols.map((header) => (

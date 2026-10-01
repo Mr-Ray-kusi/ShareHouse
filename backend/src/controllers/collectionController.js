@@ -3,7 +3,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { foldSearch, looksLikeStudentIndex, searchRegex } from '../utils/search.js';
 import { track } from '../services/telemetry.js';
 import { getActiveDistribution } from '../services/activeDistribution.js';
-import { defaultHeaders, presentBeneficiary, statsFromDist } from '../services/listService.js';
+import { buildSheetRow, presentBeneficiary, resolveListHeaders, statsFromDist } from '../services/listService.js';
 import {
   assertBeneficiaryAssigned,
   beneficiaryMatchesAssignment,
@@ -21,9 +21,24 @@ function populatedSheetHeaders(headers = [], rows = []) {
   );
 }
 
-async function headerUsage(tenantId, distId, headers) {
-  const sample = await Beneficiary.find({ tenantId, distributionId: distId }).select('sheetRow').limit(400);
-  return populatedSheetHeaders(headers, sample);
+async function listHeaderState(tenantId, dist, rows) {
+  const sample = rows || await Beneficiary.find({ tenantId, distributionId: dist._id })
+    .select('sheetRow studentIndex fullName level phone')
+    .limit(400);
+  const headers = resolveListHeaders(dist.sheetHeaders, sample);
+  const shaped = sample.map((row) => ({
+    sheetRow: buildSheetRow({
+      studentIndex: row.studentIndex,
+      fullName: row.fullName,
+      level: row.level,
+      phone: row.phone,
+      sheetRow: row.sheetRow || {},
+    }, headers),
+  }));
+  return {
+    headers,
+    populatedHeaders: populatedSheetHeaders(headers, shaped),
+  };
 }
 
 async function resolveWorkingDistribution(req) {
@@ -53,9 +68,8 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
     }
   }
 
-  const headers = dist.sheetHeaders?.length ? dist.sheetHeaders : defaultHeaders();
   const assignment = await getAssistantAssignment(req);
-  const populatedHeaders = await headerUsage(req.tenantId, dist._id, headers);
+  const { headers, populatedHeaders } = await listHeaderState(req.tenantId, dist);
   const meta = {
     distribution: {
       id: dist._id,
@@ -117,7 +131,6 @@ export const offlinePack = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: 'No active distribution. Ask the hall president to start one.' });
   }
 
-  const headers = dist.sheetHeaders?.length ? dist.sheetHeaders : defaultHeaders();
   const assignment = await getAssistantAssignment(req);
   const items = await Beneficiary.find({
     tenantId: req.tenantId,
@@ -137,6 +150,7 @@ export const offlinePack = asyncHandler(async (req, res) => {
     }).select('beneficiaryId collectedAt assistantName assistantId')
     : [];
   const markMap = new Map(marks.map((m) => [String(m.beneficiaryId), m]));
+  const { headers, populatedHeaders } = await listHeaderState(req.tenantId, dist, items);
 
   res.json({
     fetchedAt: new Date().toISOString(),
@@ -150,7 +164,7 @@ export const offlinePack = asyncHandler(async (req, res) => {
       receivedCount: dist.receivedCount,
     },
     headers,
-    populatedHeaders: populatedSheetHeaders(headers, items),
+    populatedHeaders,
     assignment,
     stats: statsFromDist(dist),
     truncated: items.length >= 8000,

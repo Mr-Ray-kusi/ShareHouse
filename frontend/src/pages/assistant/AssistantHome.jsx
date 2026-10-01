@@ -13,10 +13,12 @@ import ExceptionPanel from '../../components/ExceptionPanel';
 import Modal from '../../components/Modal';
 import CameraCapture from '../../components/CameraCapture';
 import {
-  defaultSheetHeaders,
+  completeSheetRow,
   fieldsFromSheetValues,
+  formSheetHeaders,
   requiredSheetHeaders,
 } from '../../utils/sheetColumns';
+
 import {
   applyMarkToPack,
   enqueueException,
@@ -29,13 +31,9 @@ import {
 } from '../../offline/deskStore';
 import { flushDeskQueue, hydratePackIfNeeded } from '../../offline/syncDesk';
 
-function walkInColumns(headers) {
-  return headers?.length ? headers : defaultSheetHeaders();
-}
-
 function blankWalkIn(headers) {
   const values = {};
-  for (const header of walkInColumns(headers)) values[header] = '';
+  for (const header of headers || []) values[header] = '';
   return values;
 }
 
@@ -271,15 +269,15 @@ export default function AssistantHome() {
     e.preventDefault();
     setWalkBusy(true);
     setError('');
-    const cols = walkInColumns(headers);
-    const fields = fieldsFromSheetValues(walkIn, cols);
+    const sheetRow = completeSheetRow(walkIn, headers.length ? headers : walkInCols);
+    const fields = fieldsFromSheetValues(sheetRow, headers.length ? headers : walkInCols);
     const form = new FormData();
     form.append('fullName', fields.fullName);
     form.append('studentIndex', fields.studentIndex);
     form.append('level', fields.level);
     form.append('phone', fields.phone);
     form.append('reason', walkInReason.trim());
-    form.append('sheetRow', JSON.stringify(walkIn));
+    form.append('sheetRow', JSON.stringify(sheetRow));
     if (walkInPhoto) form.append('photo', walkInPhoto);
     try {
       const { data } = await api.post('/api/exceptions', form);
@@ -295,7 +293,7 @@ export default function AssistantHome() {
         await enqueueException({
           ...fields,
           reason: walkInReason.trim(),
-          sheetRow: walkIn,
+          sheetRow,
           photoBlob: walkInPhoto || null,
           photoName: walkInPhoto?.name,
         });
@@ -314,8 +312,8 @@ export default function AssistantHome() {
     }
   }
 
-  const walkInCols = walkInColumns(headers);
-  const walkInRequired = requiredSheetHeaders(walkInCols, populatedHeaders);
+  const walkInCols = formSheetHeaders(headers, populatedHeaders);
+  const walkInRequired = requiredSheetHeaders(walkInCols, walkInCols);
 
   return (
     <div className="h-full min-h-0 flex flex-col px-3 pt-3 pb-2 max-w-6xl mx-auto">
@@ -455,10 +453,10 @@ export default function AssistantHome() {
       {walkInOpen ? (
         <Modal wide title="Walk-in request" onClose={walkBusy ? undefined : () => { setWalkInOpen(false); setWalkInPhoto(null); }}>
           <p className="text-sm text-ink/70">
-            Fill the same columns as the hall list. Columns that are empty on the list are optional. Do not give the item until the hall admin approves this request.
+            Fill the same columns as the hall list. Empty columns are not asked for. Do not give the item until the hall admin approves this request.
           </p>
           <form className="mt-4 space-y-3" onSubmit={submitWalkIn}>
-            {walkInCols.map((header) => (
+            {walkInCols.length ? walkInCols.map((header) => (
                 <div key={header}>
                   <label className="label">{header}</label>
                   <input
@@ -468,7 +466,9 @@ export default function AssistantHome() {
                     required={walkInRequired.has(header)}
                   />
                 </div>
-            ))}
+            )) : (
+              <p className="text-sm text-red-700">The hall list columns have not loaded. Search once while online, then try again.</p>
+            )}
             <div>
               <label className="label">Why are they not on the list?</label>
               <textarea className="input min-h-[88px]" value={walkInReason} onChange={(e) => setWalkInReason(e.target.value)} required />
@@ -480,7 +480,7 @@ export default function AssistantHome() {
             />
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button type="button" className="btn-ghost" disabled={walkBusy} onClick={() => { setWalkInOpen(false); setWalkInPhoto(null); }}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={walkBusy}>{walkBusy ? 'Sending…' : 'Send for approval'}</button>
+              <button type="submit" className="btn-primary" disabled={walkBusy || !walkInCols.length}>{walkBusy ? 'Sending…' : 'Send for approval'}</button>
             </div>
           </form>
         </Modal>

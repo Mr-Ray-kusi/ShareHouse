@@ -80,9 +80,7 @@ export function requiredSheetHeaders(headers = [], rows = []) {
     if (roles.lastName) required.add(roles.lastName);
     if (roles.firstName) required.add(roles.firstName);
   }
-  const used = (rows || []).length && typeof rows[0] === 'string'
-    ? rows
-    : populatedSheetHeaders(headers, rows);
+  const used = populatedSheetHeaders(headers, rows);
   if (used.length) {
     for (const header of [...required]) {
       if (!used.includes(header)) required.delete(header);
@@ -92,9 +90,32 @@ export function requiredSheetHeaders(headers = [], rows = []) {
 }
 
 export function populatedSheetHeaders(headers = [], rows = []) {
+  if ((rows || []).length && typeof rows[0] === 'string') {
+    return (headers || []).filter((header) => rows.includes(header));
+  }
   return (headers || []).filter((header) =>
     (rows || []).some((row) => String((row.sheetRow || {})[header] || '').trim())
   );
+}
+
+export function formSheetHeaders(headers = [], rows = [], student = null) {
+  const cols = (headers || []).filter(Boolean);
+  const populated = populatedSheetHeaders(cols, rows);
+  const extra = [];
+  const sheet = student?.sheetRow && typeof student.sheetRow === 'object' ? student.sheetRow : {};
+  for (const header of cols) {
+    if (String(sheet[header] || '').trim() && !populated.includes(header) && !extra.includes(header)) {
+      extra.push(header);
+    }
+  }
+  const visible = [...populated, ...extra];
+  return visible.length ? visible : cols;
+}
+
+export function completeSheetRow(values = {}, headers = []) {
+  const row = {};
+  for (const header of headers || []) row[header] = values[header] ?? '';
+  return row;
 }
 
 export function fieldsFromSheetValues(values, headers = []) {
@@ -111,6 +132,6 @@ export function fieldsFromSheetValues(values, headers = []) {
     fullName,
     level: String(roles.level ? values[roles.level] : '').trim(),
     phone: String(roles.phone ? values[roles.phone] : '').trim(),
-    sheetRow: { ...values },
+    sheetRow: completeSheetRow(values, headers),
   };
 }
