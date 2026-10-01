@@ -5,8 +5,10 @@ import { authenticate, requireRoles, requireActiveTenant, blockSupportWrites } f
 const router = Router();
 router.use(authenticate, requireActiveTenant, blockSupportWrites);
 router.get('/', requireRoles('tenant_admin', 'super_admin'), invites.listInvites);
+router.get('/assignment-options', requireRoles('tenant_admin', 'super_admin'), invites.assignmentOptions);
 router.get('/:id/collections', requireRoles('tenant_admin', 'super_admin'), invites.listAssistantCollections);
 router.post('/', requireRoles('tenant_admin'), invites.createInvite);
+router.patch('/:id/assignment', requireRoles('tenant_admin'), invites.setInviteAssignment);
 router.post('/:id/password', requireRoles('tenant_admin'), invites.setInvitePassword);
 router.post('/:id/revoke', requireRoles('tenant_admin'), invites.revokeInvite);
 router.post('/:id/restore', requireRoles('tenant_admin'), invites.restoreInvite);

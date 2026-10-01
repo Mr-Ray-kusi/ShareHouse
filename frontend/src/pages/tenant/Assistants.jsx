@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import SheetTable from '../../components/SheetTable';
 import { downloadCsv, printSheet, sortSheetRows } from '../../utils/sheetExport';
 import HallHero from '../../components/HallHero';
+import AssistantAssignmentFields, { assignmentSummary } from '../../components/AssistantAssignmentFields';
 
 export default function Assistants() {
   const { tenant, supportMode } = useAuth();
@@ -23,12 +24,22 @@ export default function Assistants() {
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState('asc');
   const [copiedId, setCopiedId] = useState('');
+  const [assignColumns, setAssignColumns] = useState([]);
+  const [assignColumn, setAssignColumn] = useState('');
+  const [assignValues, setAssignValues] = useState([]);
+  const [editId, setEditId] = useState('');
+  const [editColumn, setEditColumn] = useState('');
+  const [editValues, setEditValues] = useState([]);
 
   async function load() {
-    const { data } = await api.get('/api/invites');
+    const [{ data }, options] = await Promise.all([
+      api.get('/api/invites'),
+      api.get('/api/invites/assignment-options').catch(() => ({ data: { columns: [] } })),
+    ]);
     setInvites(data.invites || []);
     setJoinUrl(data.joinUrl || '');
     setJoinPath(data.joinPath || '');
+    setAssignColumns(options.data?.columns || []);
   }
 
   useEffect(() => {
@@ -75,9 +86,21 @@ export default function Assistants() {
         setBusy(false);
         return;
       }
-      await api.post('/api/invites', { label: label.trim(), password: password.trim() || undefined });
+      if (assignColumn && !assignValues.length) {
+        setError(`Pick at least one ${assignColumn} value, or leave this assistant on the whole list.`);
+        setBusy(false);
+        return;
+      }
+      await api.post('/api/invites', {
+        label: label.trim(),
+        password: password.trim() || undefined,
+        assignmentColumn: assignColumn,
+        assignmentValues: assignColumn ? assignValues : [],
+      });
       setLabel('');
       setPassword('');
+      setAssignColumn('');
+      setAssignValues([]);
       await load();
     } catch (err) {
       setError(err.response?.data?.message || 'Could not create invite.');
@@ -98,6 +121,28 @@ export default function Assistants() {
       await load();
     } catch (err) {
       setError(err.response?.data?.message || 'Could not set password.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveAssignment(id) {
+    setBusy(true);
+    setError('');
+    try {
+      if (editColumn && !editValues.length) {
+        setError(`Pick at least one ${editColumn} value, or leave this assistant on the whole list.`);
+        setBusy(false);
+        return;
+      }
+      await api.patch(`/api/invites/${id}/assignment`, {
+        assignmentColumn: editColumn,
+        assignmentValues: editColumn ? editValues : [],
+      });
+      setEditId('');
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not save that section.');
     } finally {
       setBusy(false);
     }
@@ -163,7 +208,7 @@ export default function Assistants() {
       <HallHero
         eyebrow={`${tenant?.schoolName || ''} · /${tenant?.tenantId || ''}`}
         title="Assistants"
-        subtitle="One hall link for assistants. Each person gets their own password."
+        subtitle="One hall link for assistants. Give each person a password and, if you want, only their section of the list — Level 100s, a hall, or another Excel column."
       />
 
       {(joinUrl || joinPath) && (
@@ -175,17 +220,27 @@ export default function Assistants() {
       )}
 
       {!supportMode && (
-        <form onSubmit={create} className="card p-5 mt-6 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-          <input className="input" placeholder="Name (e.g. Table 2 — Kojo)" value={label} onChange={(e) => setLabel(e.target.value)} required />
-          <input
-            className="input"
-            type="text"
-            placeholder="Unique password (leave blank to generate)"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="off"
+        <form onSubmit={create} className="card p-5 mt-6 space-y-3">
+          <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+            <input className="input" placeholder="Name (e.g. Table 2 — Kojo)" value={label} onChange={(e) => setLabel(e.target.value)} required />
+            <input
+              className="input"
+              type="text"
+              placeholder="Unique password (leave blank to generate)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="off"
+            />
+            <button className="btn-primary" disabled={busy}>{busy ? 'Creating…' : 'Add assistant'}</button>
+          </div>
+          <AssistantAssignmentFields
+            columns={assignColumns}
+            column={assignColumn}
+            values={assignValues}
+            onColumn={setAssignColumn}
+            onValues={setAssignValues}
+            disabled={busy}
           />
-          <button className="btn-primary" disabled={busy}>{busy ? 'Creating…' : 'Add assistant'}</button>
         </form>
       )}
       {error && <p className="text-sm text-red-700 mt-3">{error}</p>}
@@ -208,6 +263,7 @@ export default function Assistants() {
                   </p>
                   <p className="text-xs text-ink/60">
                     {inv.isActive ? 'Active' : 'Revoked'}
+                    {` · ${assignmentSummary(inv)}`}
                     {inv.assistantName ? '' : ' · not joined yet'}
                     {open ? ' · showing verified list' : ' · tap to view verified students'}
                   </p>
@@ -235,6 +291,21 @@ export default function Assistants() {
                           Set password
                         </button>
                       )}
+                      <button
+                        type="button"
+                        className="btn-ghost text-xs shrink-0"
+                        onClick={() => {
+                          if (editId === inv._id) {
+                            setEditId('');
+                            return;
+                          }
+                          setEditId(inv._id);
+                          setEditColumn(inv.assignmentColumn || '');
+                          setEditValues(Array.isArray(inv.assignmentValues) ? inv.assignmentValues : []);
+                        }}
+                      >
+                        {editId === inv._id ? 'Cancel section' : 'Change section'}
+                      </button>
                       {inv.isActive ? (
                         <button type="button" className="btn-ghost text-xs text-red-700 shrink-0" onClick={() => revoke(inv._id)}>Revoke</button>
                       ) : (
@@ -247,6 +318,26 @@ export default function Assistants() {
                   )}
                 </div>
               </div>
+              {editId === inv._id && (
+                <form
+                  className="px-4 pb-4 space-y-3"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    saveAssignment(inv._id);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <AssistantAssignmentFields
+                    columns={assignColumns}
+                    column={editColumn}
+                    values={editValues}
+                    onColumn={setEditColumn}
+                    onValues={setEditValues}
+                    disabled={busy}
+                  />
+                  <button className="btn-primary" disabled={busy}>Save section</button>
+                </form>
+              )}
               {resetId === inv._id && (
                 <form
                   className="px-4 pb-4 flex flex-col md:flex-row gap-2"

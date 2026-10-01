@@ -5,6 +5,11 @@ import { track } from '../services/telemetry.js';
 import { getActiveDistribution } from '../services/activeDistribution.js';
 import { defaultHeaders, presentBeneficiary, statsFromDist } from '../services/listService.js';
 import {
+  assertBeneficiaryAssigned,
+  beneficiaryMatchesAssignment,
+  getAssistantAssignment,
+} from '../services/assistantAssignment.js';
+import {
   createCollectionMark,
   resolveActiveForBeneficiary,
   voidCollectionMark,
@@ -38,6 +43,7 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
   }
 
   const headers = dist.sheetHeaders?.length ? dist.sheetHeaders : defaultHeaders();
+  const assignment = await getAssistantAssignment(req);
   const meta = {
     distribution: {
       id: dist._id,
@@ -47,6 +53,7 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
       beneficiaryCount: dist.beneficiaryCount,
     },
     headers,
+    assignment,
     offline: false,
   };
 
@@ -58,7 +65,7 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
   const items = await Beneficiary.find(filter)
     .select('studentIndex fullName level phone sheetRow searchText')
     .sort({ fullName: 1, studentIndex: 1 })
-    .limit(limit);
+    .limit(assignment ? (q ? 400 : 8000) : limit);
   const marks = items.length
     ? await Collection.find({
       tenantId: req.tenantId,
@@ -70,6 +77,7 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
   const needle = foldSearch(q);
 
   const ranked = items
+    .filter((b) => beneficiaryMatchesAssignment(b, assignment))
     .map((b) => {
       const mark = markMap.get(String(b._id));
       let rank = 0;
@@ -81,7 +89,8 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
       }
       return { ...presentBeneficiary(b, mark, headers), rank };
     })
-    .sort((a, b) => (q ? b.rank - a.rank : 0) || a.fullName.localeCompare(b.fullName));
+    .sort((a, b) => (q ? b.rank - a.rank : 0) || a.fullName.localeCompare(b.fullName))
+    .slice(0, limit);
 
   res.json({
     ...meta,
@@ -96,6 +105,7 @@ export const offlinePack = asyncHandler(async (req, res) => {
   }
 
   const headers = dist.sheetHeaders?.length ? dist.sheetHeaders : defaultHeaders();
+  const assignment = await getAssistantAssignment(req);
   const items = await Beneficiary.find({
     tenantId: req.tenantId,
     distributionId: dist._id,
@@ -103,6 +113,9 @@ export const offlinePack = asyncHandler(async (req, res) => {
     .select('studentIndex fullName level phone sheetRow searchText')
     .sort({ fullName: 1, studentIndex: 1 })
     .limit(8000);
+  const scoped = assignment
+    ? items.filter((b) => beneficiaryMatchesAssignment(b, assignment))
+    : items;
   const marks = items.length
     ? await Collection.find({
       tenantId: req.tenantId,
@@ -124,9 +137,10 @@ export const offlinePack = asyncHandler(async (req, res) => {
       receivedCount: dist.receivedCount,
     },
     headers,
+    assignment,
     stats: statsFromDist(dist),
     truncated: items.length >= 8000,
-    beneficiaries: items.map((b) => presentBeneficiary(b, markMap.get(String(b._id)), headers)),
+    beneficiaries: scoped.map((b) => presentBeneficiary(b, markMap.get(String(b._id)), headers)),
   });
 });
 
@@ -151,6 +165,9 @@ async function markOne(req, beneficiaryId) {
     err.status = 404;
     throw err;
   }
+
+  const assignment = await getAssistantAssignment(req);
+  assertBeneficiaryAssigned(beneficiary, assignment);
 
   const dist = await resolveActiveForBeneficiary(req.tenantId, beneficiary);
   const result = await createCollectionMark({

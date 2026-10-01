@@ -4,6 +4,7 @@ import { generateInviteCode, generateInvitePassword, isFieldQrCode } from '../ut
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { env } from '../config/env.js';
 import { getActiveDistribution } from '../services/activeDistribution.js';
+import { loadAssignmentOptions, parseAssignment, throwIfAssignmentSchema } from '../services/assistantAssignment.js';
 
 export async function ensureJoinCode(tenant) {
   if (tenant.joinCode) return tenant.joinCode;
@@ -73,6 +74,31 @@ export const listInvites = asyncHandler(async (req, res) => {
   });
 });
 
+export const assignmentOptions = asyncHandler(async (req, res) => {
+  const options = await loadAssignmentOptions(req.tenantId);
+  res.json(options);
+});
+
+export const setInviteAssignment = asyncHandler(async (req, res) => {
+  const invite = await Invite.findOne({ _id: req.params.id, tenantId: req.tenantId });
+  if (!invite) return res.status(404).json({ message: 'Invite not found.' });
+  const assignment = parseAssignment(req.body);
+  invite.assignmentColumn = assignment.assignmentColumn;
+  invite.assignmentValues = assignment.assignmentValues;
+  try {
+    await invite.save();
+  } catch (err) {
+    throwIfAssignmentSchema(err);
+    throw err;
+  }
+  res.json({
+    message: assignment.assignmentColumn
+      ? `This assistant now covers ${assignment.assignmentColumn}: ${assignment.assignmentValues.join(', ')}.`
+      : 'This assistant can now verify the whole list.',
+    invite,
+  });
+});
+
 export const createInvite = asyncHandler(async (req, res) => {
   const { label, distributionId, password: requestedPassword } = req.body || {};
   const name = String(label || '').trim();
@@ -83,7 +109,8 @@ export const createInvite = asyncHandler(async (req, res) => {
   const password = await uniquePassword(req.tenantId, requestedPassword);
   const passwordHash = await bcrypt.hash(password, 12);
 
-  const invite = await Invite.create({
+  const assignment = parseAssignment(req.body);
+  const payload = {
     tenantId: req.tenantId,
     code: joinCode,
     label: name,
@@ -92,7 +119,18 @@ export const createInvite = asyncHandler(async (req, res) => {
     distributionId: distributionId || null,
     createdBy: req.user._id,
     isActive: true,
-  });
+  };
+  if (assignment.assignmentColumn) {
+    payload.assignmentColumn = assignment.assignmentColumn;
+    payload.assignmentValues = assignment.assignmentValues;
+  }
+  let invite;
+  try {
+    invite = await Invite.create(payload);
+  } catch (err) {
+    throwIfAssignmentSchema(err);
+    throw err;
+  }
 
   res.status(201).json({
     invite: {

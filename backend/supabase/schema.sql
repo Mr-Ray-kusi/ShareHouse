@@ -124,6 +124,8 @@ create table if not exists public.invites (
   "createdBy" uuid not null,
   "assistantId" uuid,
   "assistantName" text not null default '',
+  "assignmentColumn" text not null default '',
+  "assignmentValues" text[] not null default '{}',
   "isActive" boolean not null default true,
   "lastUsedAt" timestamptz,
   "createdAt" timestamptz not null default now(),
@@ -132,6 +134,8 @@ create table if not exists public.invites (
 
 create index if not exists invites_code_idx on public.invites (code);
 create index if not exists invites_tenant_active_idx on public.invites ("tenantId", "isActive");
+alter table public.invites add column if not exists "assignmentColumn" text not null default '';
+alter table public.invites add column if not exists "assignmentValues" text[] not null default '{}';
 
 create table if not exists public.sheet_uploads (
   id uuid primary key default gen_random_uuid(),

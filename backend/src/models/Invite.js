@@ -13,6 +13,8 @@ export const Invite = createModel({
     'createdBy',
     'assistantId',
     'assistantName',
+    'assignmentColumn',
+    'assignmentValues',
     'isActive',
     'lastUsedAt',
     'createdAt',
@@ -20,6 +22,7 @@ export const Invite = createModel({
   ],
   uuidFields: ['distributionId', 'createdBy', 'assistantId'],
   dateFields: ['lastUsedAt', 'createdAt', 'updatedAt'],
+  arrayFields: ['assignmentValues'],
   prepare(doc) {
     if (doc.code) doc.code = String(doc.code).toUpperCase().trim();
   },

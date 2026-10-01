@@ -43,6 +43,7 @@ export default function AssistantHome() {
   const [walkInPhoto, setWalkInPhoto] = useState(null);
   const [walkIns, setWalkIns] = useState([]);
   const [walkBusy, setWalkBusy] = useState(false);
+  const [assignment, setAssignment] = useState(null);
   const searchSeq = useRef(0);
 
   async function refreshQueue() {
@@ -54,12 +55,14 @@ export default function AssistantHome() {
       const { data } = await api.get('/api/collections/search', { params: { meta: 1 } });
       setDistribution(data.distribution);
       setHeaders(data.headers || []);
+      setAssignment(data.assignment || null);
     } catch (err) {
       if (!isNetworkError(err)) throw err;
       const pack = await getPack();
       if (pack) {
         setDistribution(pack.distribution);
         setHeaders(pack.headers || []);
+        setAssignment(pack.assignment || null);
       } else {
         throw err;
       }
@@ -93,6 +96,7 @@ export default function AssistantHome() {
           .then((pack) => {
             if (pack?.headers) setHeaders(pack.headers);
             if (pack?.distribution) setDistribution(pack.distribution);
+            if (pack?.assignment !== undefined) setAssignment(pack.assignment || null);
           })
           .catch(() => {});
         loadWalkIns();
@@ -133,6 +137,7 @@ export default function AssistantHome() {
       if (seq !== searchSeq.current) return;
       setDistribution(data.distribution);
       setHeaders(data.headers || []);
+      setAssignment(data.assignment || null);
       setList(rows);
       setSearched(true);
       if (rows.length) setQ('');
@@ -145,6 +150,7 @@ export default function AssistantHome() {
         if (seq !== searchSeq.current) return;
         setDistribution(pack?.distribution || null);
         setHeaders(pack?.headers || headers);
+        setAssignment(pack?.assignment || null);
         setList(rows);
         setSearched(true);
         if (rows.length) setQ('');
@@ -253,7 +259,9 @@ export default function AssistantHome() {
           title={tenant?.name || 'ShareHouse'}
           subtitle={
             distribution
-              ? `${distribution.title} · search a student to verify`
+              ? `${distribution.title} · ${assignment?.values?.length
+                ? `only ${assignment.column} ${assignment.values.join(', ')}`
+                : 'search a student to verify'}`
               : 'No active distribution yet.'
           }
         />
@@ -288,14 +296,24 @@ export default function AssistantHome() {
           }}
           onSearch={runSearch}
           debounceMs={220}
-          placeholder="Search name, ID, or program"
+          placeholder={
+            assignment?.values?.length
+              ? `Search your ${assignment.column} students`
+              : 'Search name, ID, or program'
+          }
         />
         <p className="text-xs text-ink/60">
           {loading
             ? 'Searching…'
             : searched
-              ? (list.length ? `${list.length} match${list.length === 1 ? '' : 'es'}.` : 'No student matched that search.')
-              : 'Search the student in front of you, then confirm before you verify.'}
+              ? (list.length
+                ? `${list.length} match${list.length === 1 ? '' : 'es'}.`
+                : (assignment?.values?.length
+                  ? 'No student in your section matched that search.'
+                  : 'No student matched that search.'))
+              : (assignment?.values?.length
+                ? `You can verify ${assignment.column} ${assignment.values.join(', ')}. Search the student in front of you, then confirm.`
+                : 'Search the student in front of you, then confirm before you verify.')}
         </p>
         {searched ? (
           <button type="button" className="btn-ghost text-xs" onClick={() => { setWalkInPhoto(null); setWalkInOpen(true); }}>
@@ -313,7 +331,7 @@ export default function AssistantHome() {
                 showMark
                 onMark={setConfirmRow}
                 busyId={busyId}
-                emptyMessage="No student matched that search."
+                emptyMessage={assignment?.values?.length ? 'No student in your section matched that search.' : 'No student matched that search.'}
               />
             </div>
             <div className="hidden md:block h-full">
@@ -324,7 +342,7 @@ export default function AssistantHome() {
                 onMark={setConfirmRow}
                 busyId={busyId}
                 fillHeight
-                emptyMessage="No student matched that search."
+                emptyMessage={assignment?.values?.length ? 'No student in your section matched that search.' : 'No student matched that search.'}
               />
             </div>
           </>
