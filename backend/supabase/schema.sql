@@ -222,12 +222,14 @@ create table if not exists public.list_exceptions (
   "reviewNote" text not null default '',
   "beneficiaryId" uuid,
   "markedOnApprove" boolean not null default false,
+  "sheetRow" jsonb not null default '{}'::jsonb,
   "createdAt" timestamptz not null default now(),
   "updatedAt" timestamptz not null default now()
 );
 
 create index if not exists list_exceptions_tenant_status_idx
   on public.list_exceptions ("tenantId", "distributionId", status, "createdAt" desc);
+alter table public.list_exceptions add column if not exists "sheetRow" jsonb not null default '{}'::jsonb;
 
 alter table public.tenants enable row level security;
 alter table public.users enable row level security;

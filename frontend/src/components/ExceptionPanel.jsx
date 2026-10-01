@@ -58,11 +58,24 @@ export default function ExceptionPanel({
               <p className="font-semibold">{row.fullName}</p>
               <p className="text-sm text-ink/70">{row.studentIndex}</p>
               <p className="mt-1 text-sm">{row.reason}</p>
-              <p className="mt-1 text-xs text-ink/55">
-                {row.requestedByName}
-                {row.level ? ` · Level ${row.level}` : ''}
-                {row.phone ? ` · ${row.phone}` : ''}
-              </p>
+              <p className="mt-1 text-xs text-ink/55">{row.requestedByName}</p>
+              {row.sheetRow && Object.keys(row.sheetRow).some((key) => String(row.sheetRow[key] || '').trim()) ? (
+                <dl className="mt-2 grid grid-cols-1 gap-1 text-xs text-ink/70 sm:grid-cols-2">
+                  {Object.entries(row.sheetRow).map(([header, value]) => (
+                    String(value || '').trim() ? (
+                      <div key={header}>
+                        <dt className="font-semibold text-ink/50">{header}</dt>
+                        <dd>{String(value)}</dd>
+                      </div>
+                    ) : null
+                  ))}
+                </dl>
+              ) : (
+                <p className="mt-1 text-xs text-ink/55">
+                  {row.level ? `Level ${row.level}` : ''}
+                  {row.phone ? `${row.level ? ' · ' : ''}${row.phone}` : ''}
+                </p>
+              )}
               {row.reviewNote && row.status !== 'pending' ? (
                 <p className="mt-1 text-xs text-ink/60">{row.reviewNote}</p>
               ) : null}

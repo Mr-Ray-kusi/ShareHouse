@@ -47,6 +47,7 @@ export async function flushDeskQueue() {
     form.append('level', item.level || '');
     form.append('phone', item.phone || '');
     form.append('reason', item.reason || '');
+    if (item.sheetRow) form.append('sheetRow', JSON.stringify(item.sheetRow));
     if (item.photoBlob) form.append('photo', item.photoBlob, item.photoName || 'walk-in.jpg');
     try {
       await api.post('/api/exceptions', form);

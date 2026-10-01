@@ -1,8 +1,6 @@
+import { useEffect, useRef } from 'react';
 import { Search } from 'lucide-react';
 import { emitTelemetry } from '../telemetry';
-
-let searchTimer;
-let liveTimer;
 
 export default function SearchBar({
   value,
@@ -11,18 +9,26 @@ export default function SearchBar({
   placeholder = 'Search name or ID',
   debounceMs = 0,
 }) {
+  const searchTimer = useRef();
+  const liveTimer = useRef();
+
+  useEffect(() => () => {
+    window.clearTimeout(searchTimer.current);
+    window.clearTimeout(liveTimer.current);
+  }, []);
+
   function emit(next) {
     onChange(next);
-    window.clearTimeout(searchTimer);
-    window.clearTimeout(liveTimer);
+    window.clearTimeout(searchTimer.current);
+    window.clearTimeout(liveTimer.current);
     const term = String(next || '').trim();
     if (term.length >= 2) {
-      searchTimer = window.setTimeout(() => {
+      searchTimer.current = window.setTimeout(() => {
         emitTelemetry({ name: 'site_search', term, path: window.location.pathname });
       }, 700);
     }
     if (debounceMs && onSearch) {
-      liveTimer = window.setTimeout(() => onSearch(term), debounceMs);
+      liveTimer.current = window.setTimeout(() => onSearch(term), debounceMs);
     }
   }
 
@@ -30,6 +36,7 @@ export default function SearchBar({
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        window.clearTimeout(liveTimer.current);
         onSearch?.(value);
       }}
       className="flex flex-row gap-2 items-stretch"
@@ -178,3 +185,4 @@ export function applyFilters(rows, filters = {}, headers = []) {
     return true;
   });
 }
+

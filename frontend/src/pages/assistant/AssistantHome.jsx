@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Ban } from 'lucide-react';
-import api from '../../api/client';
+import { io } from 'socket.io-client';
+import api, { getAccessToken } from '../../api/client';
+import { apiOrigin } from '../../api/baseUrl';
 import { useAuth } from '../../context/AuthContext';
 import SheetTable from '../../components/SheetTable';
 import ResultCards from '../../components/ResultCards';
@@ -10,6 +12,12 @@ import ConfirmMarkModal from '../../components/ConfirmMarkModal';
 import ExceptionPanel from '../../components/ExceptionPanel';
 import Modal from '../../components/Modal';
 import CameraCapture from '../../components/CameraCapture';
+import {
+  classifySheetHeaders,
+  defaultSheetHeaders,
+  fieldsFromSheetValues,
+  requiredSheetHeaders,
+} from '../../utils/sheetColumns';
 import {
   applyMarkToPack,
   enqueueException,
@@ -22,10 +30,18 @@ import {
 } from '../../offline/deskStore';
 import { flushDeskQueue, hydratePackIfNeeded } from '../../offline/syncDesk';
 
-const emptyWalkIn = { fullName: '', studentIndex: '', level: '', phone: '', reason: '' };
+function walkInColumns(headers) {
+  return headers?.length ? headers : defaultSheetHeaders();
+}
+
+function blankWalkIn(headers) {
+  const values = {};
+  for (const header of walkInColumns(headers)) values[header] = '';
+  return values;
+}
 
 export default function AssistantHome() {
-  const { tenant } = useAuth();
+  const { tenant, user } = useAuth();
   const [q, setQ] = useState('');
   const [list, setList] = useState([]);
   const [headers, setHeaders] = useState([]);
@@ -39,12 +55,15 @@ export default function AssistantHome() {
   const [queue, setQueue] = useState({ marks: 0, exceptions: 0 });
   const [confirmRow, setConfirmRow] = useState(null);
   const [walkInOpen, setWalkInOpen] = useState(false);
-  const [walkIn, setWalkIn] = useState(emptyWalkIn);
+  const [walkIn, setWalkIn] = useState({});
+  const [walkInReason, setWalkInReason] = useState('');
   const [walkInPhoto, setWalkInPhoto] = useState(null);
   const [walkIns, setWalkIns] = useState([]);
   const [walkBusy, setWalkBusy] = useState(false);
   const [assignment, setAssignment] = useState(null);
+  const [approvalNotice, setApprovalNotice] = useState(false);
   const searchSeq = useRef(0);
+  const pendingWalkInIds = useRef(new Set());
 
   async function refreshQueue() {
     setQueue(await queueCounts());
@@ -72,11 +91,44 @@ export default function AssistantHome() {
   async function loadWalkIns() {
     try {
       const { data } = await api.get('/api/exceptions', { params: { mine: 1 } });
-      setWalkIns(data.exceptions || []);
+      const items = data.exceptions || [];
+      const prevPending = pendingWalkInIds.current;
+      if ([...prevPending].some((id) => items.find((row) => row.id === id && row.status === 'approved'))) {
+        setApprovalNotice(true);
+      }
+      pendingWalkInIds.current = new Set(items.filter((row) => row.status === 'pending').map((row) => row.id));
+      setWalkIns(items);
     } catch (_err) {
       /* keep last list when offline */
     }
   }
+
+  useEffect(() => {
+    const token = getAccessToken();
+    if (!token) return undefined;
+    const socket = io(apiOrigin() || undefined, { auth: { token } });
+    socket.on('exception:updated', (payload) => {
+      const row = payload?.exception;
+      if (!row) return;
+      const mine = String(row.requestedBy || '') === String(user?.id || user?._id || '');
+      setWalkIns((prev) => {
+        const next = [row, ...prev.filter((item) => item.id !== row.id)];
+        return next;
+      });
+      if (row.status === 'approved' && mine) {
+        pendingWalkInIds.current.delete(row.id);
+        setApprovalNotice(true);
+        setFlash('A walk-in was approved. Search that student to verify.');
+        setTimeout(() => setFlash(null), 3200);
+        hydratePackIfNeeded().catch(() => {});
+      } else if (row.status === 'pending' && mine) {
+        pendingWalkInIds.current.add(row.id);
+      } else {
+        pendingWalkInIds.current.delete(row.id);
+      }
+    });
+    return () => socket.disconnect();
+  }, [user?.id, user?._id]);
 
   useEffect(() => {
     loadMeta().catch((err) => setError(err.response?.data?.message || 'Could not load the hall list.'));
@@ -140,7 +192,7 @@ export default function AssistantHome() {
       setAssignment(data.assignment || null);
       setList(rows);
       setSearched(true);
-      if (rows.length) setQ('');
+      setQ('');
     } catch (err) {
       if (seq !== searchSeq.current) return;
       if (isNetworkError(err)) {
@@ -153,7 +205,7 @@ export default function AssistantHome() {
         setAssignment(pack?.assignment || null);
         setList(rows);
         setSearched(true);
-        if (rows.length) setQ('');
+        setQ('');
         if (!pack) setError('Offline and no saved hall list yet. Connect once to download it.');
       } else {
         setList([]);
@@ -214,17 +266,21 @@ export default function AssistantHome() {
     e.preventDefault();
     setWalkBusy(true);
     setError('');
+    const cols = walkInColumns(headers);
+    const fields = fieldsFromSheetValues(walkIn, cols);
     const form = new FormData();
-    form.append('fullName', walkIn.fullName.trim());
-    form.append('studentIndex', walkIn.studentIndex.trim());
-    form.append('level', walkIn.level.trim());
-    form.append('phone', walkIn.phone.trim());
-    form.append('reason', walkIn.reason.trim());
+    form.append('fullName', fields.fullName);
+    form.append('studentIndex', fields.studentIndex);
+    form.append('level', fields.level);
+    form.append('phone', fields.phone);
+    form.append('reason', walkInReason.trim());
+    form.append('sheetRow', JSON.stringify(walkIn));
     if (walkInPhoto) form.append('photo', walkInPhoto);
     try {
       const { data } = await api.post('/api/exceptions', form);
       setFlash(data.message);
-      setWalkIn(emptyWalkIn);
+      setWalkIn(blankWalkIn(headers));
+      setWalkInReason('');
       setWalkInPhoto(null);
       setWalkInOpen(false);
       await loadWalkIns();
@@ -232,12 +288,15 @@ export default function AssistantHome() {
     } catch (err) {
       if (isNetworkError(err)) {
         await enqueueException({
-          ...walkIn,
+          ...fields,
+          reason: walkInReason.trim(),
+          sheetRow: walkIn,
           photoBlob: walkInPhoto || null,
           photoName: walkInPhoto?.name,
         });
         setFlash('Walk-in queued. It will send when you are back online. Do not give the item until it is approved.');
-        setWalkIn(emptyWalkIn);
+        setWalkIn(blankWalkIn(headers));
+        setWalkInReason('');
         setWalkInPhoto(null);
         setWalkInOpen(false);
         await refreshQueue();
@@ -249,6 +308,11 @@ export default function AssistantHome() {
       setWalkBusy(false);
     }
   }
+
+  const walkInCols = walkInColumns(headers);
+  const walkInRequired = requiredSheetHeaders(walkInCols);
+  const walkInIndexHeader = classifySheetHeaders(walkInCols).index;
+  if (walkInIndexHeader) walkInRequired.delete(walkInIndexHeader);
 
   return (
     <div className="h-full min-h-0 flex flex-col px-3 pt-3 pb-2 max-w-6xl mx-auto">
@@ -265,10 +329,22 @@ export default function AssistantHome() {
               : 'No active distribution yet.'
           }
         />
-        <div className="flex flex-wrap gap-2 text-xs">
+        <div className="flex flex-wrap gap-2 text-xs items-center">
           <span className={`rounded-full px-2.5 py-1 font-semibold ${online ? 'bg-forest-100 text-forest-800' : 'bg-gold-400 text-ink'}`}>
             {online ? 'Online' : 'Offline — using the saved list'}
           </span>
+          {approvalNotice ? (
+            <button
+              type="button"
+              className="relative h-3.5 w-3.5 shrink-0"
+              title="A walk-in was approved"
+              onClick={() => setApprovalNotice(false)}
+            >
+              <span className="absolute inset-0 rounded-full bg-red-500 animate-ping" />
+              <span className="relative block h-3.5 w-3.5 animate-bounce rounded-full bg-red-600" />
+              <span className="sr-only">Walk-in approved</span>
+            </button>
+          ) : null}
           {queue.marks + queue.exceptions > 0 ? (
             <span className="rounded-full bg-gold-400 px-2.5 py-1 font-semibold text-ink">
               {queue.marks} mark{queue.marks === 1 ? '' : 's'} and {queue.exceptions} walk-in{queue.exceptions === 1 ? '' : 's'} waiting to sync
@@ -288,14 +364,14 @@ export default function AssistantHome() {
         <SearchBar
           value={q}
           onChange={(next) => {
+            searchSeq.current += 1;
             setQ(next);
-            if (searched && String(next || '').trim().length < 2) {
-              setSearched(false);
-              setList([]);
-            }
+            setSearched(false);
+            setList([]);
+            setLoading(false);
           }}
           onSearch={runSearch}
-          debounceMs={220}
+          debounceMs={2000}
           placeholder={
             assignment?.values?.length
               ? `Search your ${assignment.column} students`
@@ -316,7 +392,12 @@ export default function AssistantHome() {
                 : 'Search the student in front of you, then confirm before you verify.')}
         </p>
         {searched ? (
-          <button type="button" className="btn-ghost text-xs" onClick={() => { setWalkInPhoto(null); setWalkInOpen(true); }}>
+          <button type="button" className="btn-ghost text-xs" onClick={() => {
+            setWalkIn(blankWalkIn(headers));
+            setWalkInReason('');
+            setWalkInPhoto(null);
+            setWalkInOpen(true);
+          }}>
             Not on the list? Request a walk-in
           </button>
         ) : null}
@@ -369,32 +450,25 @@ export default function AssistantHome() {
       />
 
       {walkInOpen ? (
-        <Modal title="Walk-in request" onClose={walkBusy ? undefined : () => { setWalkInOpen(false); setWalkInPhoto(null); }}>
+        <Modal wide title="Walk-in request" onClose={walkBusy ? undefined : () => { setWalkInOpen(false); setWalkInPhoto(null); }}>
           <p className="text-sm text-ink/70">
-            Do not give the item until the hall admin approves this request.
+            Fill the same columns as the hall list. Do not give the item until the hall admin approves this request.
           </p>
           <form className="mt-4 space-y-3" onSubmit={submitWalkIn}>
-            <div>
-              <label className="label">Full name</label>
-              <input className="input" value={walkIn.fullName} onChange={(e) => setWalkIn((p) => ({ ...p, fullName: e.target.value }))} required />
-            </div>
-            <div>
-              <label className="label">Student index (if they have one)</label>
-              <input className="input" value={walkIn.studentIndex} onChange={(e) => setWalkIn((p) => ({ ...p, studentIndex: e.target.value }))} />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="label">Level</label>
-                <input className="input" value={walkIn.level} onChange={(e) => setWalkIn((p) => ({ ...p, level: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label">Phone</label>
-                <input className="input" value={walkIn.phone} onChange={(e) => setWalkIn((p) => ({ ...p, phone: e.target.value }))} />
-              </div>
-            </div>
+            {walkInCols.map((header) => (
+                <div key={header}>
+                  <label className="label">{header}</label>
+                  <input
+                    className="input"
+                    value={walkIn[header] || ''}
+                    onChange={(e) => setWalkIn((prev) => ({ ...prev, [header]: e.target.value }))}
+                    required={walkInRequired.has(header)}
+                  />
+                </div>
+            ))}
             <div>
               <label className="label">Why are they not on the list?</label>
-              <textarea className="input min-h-[88px]" value={walkIn.reason} onChange={(e) => setWalkIn((p) => ({ ...p, reason: e.target.value }))} required />
+              <textarea className="input min-h-[88px]" value={walkInReason} onChange={(e) => setWalkInReason(e.target.value)} required />
             </div>
             <CameraCapture
               value={walkInPhoto}
