@@ -260,6 +260,15 @@ export default function AssistantHome() {
   }
 
   async function revealDeskStudents() {
+    if (noticeOpen) {
+      searchSeq.current += 1;
+      setNoticeOpen(false);
+      setSearched(false);
+      setList([]);
+      setError('');
+      setLoading(false);
+      return;
+    }
     const pending = walkIns.filter((row) => row.status === 'pending');
     const approved = [
       ...approvedQueue,
@@ -405,11 +414,13 @@ export default function AssistantHome() {
   const pendingWalkIns = walkIns.filter((row) => row.status === 'pending');
   const approvedWalkIns = walkIns.filter((row) => row.status === 'approved');
   const noticeCount = approvedWalkIns.length + pendingWalkIns.length + queue.marks + queue.exceptions;
-  const noticeLabel = approvedWalkIns.length
-    ? `${approvedWalkIns.length} approved walk-in${approvedWalkIns.length === 1 ? '' : 's'}. Tap to show`
-    : pendingWalkIns.length
-      ? `${pendingWalkIns.length} walk-in${pendingWalkIns.length === 1 ? '' : 's'} waiting. Tap to show`
-      : `${queue.marks} mark${queue.marks === 1 ? '' : 's'} and ${queue.exceptions} walk-in${queue.exceptions === 1 ? '' : 's'} waiting to sync. Tap to show`;
+  const noticeLabel = `${
+    approvedWalkIns.length
+      ? `${approvedWalkIns.length} approved walk-in${approvedWalkIns.length === 1 ? '' : 's'}`
+      : pendingWalkIns.length
+        ? `${pendingWalkIns.length} walk-in${pendingWalkIns.length === 1 ? '' : 's'} waiting`
+        : `${queue.marks} mark${queue.marks === 1 ? '' : 's'} and ${queue.exceptions} walk-in${queue.exceptions === 1 ? '' : 's'} waiting to sync`
+  }. ${noticeOpen ? 'Tap to hide' : 'Tap to show'}`;
 
   return (
     <div className="h-full min-h-0 flex flex-col px-3 pt-3 pb-2 max-w-6xl mx-auto">
@@ -555,18 +566,6 @@ export default function AssistantHome() {
               ) : null}
             </div>
           </>
-        ) : pendingWalkIns.length ? (
-          <div className="mt-4">
-            <h2 className="font-display text-xl mb-2">Your walk-ins</h2>
-            <ExceptionPanel
-              items={pendingWalkIns}
-              compact
-              onCancel={async (row) => {
-                await api.post(`/api/exceptions/${row.id}/cancel`);
-                await loadWalkIns();
-              }}
-            />
-          </div>
         ) : null}
       </div>
 
