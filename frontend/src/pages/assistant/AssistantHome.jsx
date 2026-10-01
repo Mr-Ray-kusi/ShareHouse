@@ -13,7 +13,6 @@ import ExceptionPanel from '../../components/ExceptionPanel';
 import Modal from '../../components/Modal';
 import CameraCapture from '../../components/CameraCapture';
 import {
-  classifySheetHeaders,
   defaultSheetHeaders,
   fieldsFromSheetValues,
   requiredSheetHeaders,
@@ -61,6 +60,7 @@ export default function AssistantHome() {
   const [walkIns, setWalkIns] = useState([]);
   const [walkBusy, setWalkBusy] = useState(false);
   const [assignment, setAssignment] = useState(null);
+  const [populatedHeaders, setPopulatedHeaders] = useState([]);
   const [approvalNotice, setApprovalNotice] = useState(false);
   const searchSeq = useRef(0);
   const pendingWalkInIds = useRef(new Set());
@@ -75,6 +75,7 @@ export default function AssistantHome() {
       setDistribution(data.distribution);
       setHeaders(data.headers || []);
       setAssignment(data.assignment || null);
+      setPopulatedHeaders(data.populatedHeaders || []);
     } catch (err) {
       if (!isNetworkError(err)) throw err;
       const pack = await getPack();
@@ -82,6 +83,7 @@ export default function AssistantHome() {
         setDistribution(pack.distribution);
         setHeaders(pack.headers || []);
         setAssignment(pack.assignment || null);
+        setPopulatedHeaders(pack.populatedHeaders || []);
       } else {
         throw err;
       }
@@ -149,6 +151,7 @@ export default function AssistantHome() {
             if (pack?.headers) setHeaders(pack.headers);
             if (pack?.distribution) setDistribution(pack.distribution);
             if (pack?.assignment !== undefined) setAssignment(pack.assignment || null);
+            if (pack?.populatedHeaders) setPopulatedHeaders(pack.populatedHeaders);
           })
           .catch(() => {});
         loadWalkIns();
@@ -190,6 +193,7 @@ export default function AssistantHome() {
       setDistribution(data.distribution);
       setHeaders(data.headers || []);
       setAssignment(data.assignment || null);
+      if (data.populatedHeaders) setPopulatedHeaders(data.populatedHeaders);
       setList(rows);
       setSearched(true);
       setQ('');
@@ -203,6 +207,7 @@ export default function AssistantHome() {
         setDistribution(pack?.distribution || null);
         setHeaders(pack?.headers || headers);
         setAssignment(pack?.assignment || null);
+        if (pack?.populatedHeaders) setPopulatedHeaders(pack.populatedHeaders);
         setList(rows);
         setSearched(true);
         setQ('');
@@ -310,9 +315,7 @@ export default function AssistantHome() {
   }
 
   const walkInCols = walkInColumns(headers);
-  const walkInRequired = requiredSheetHeaders(walkInCols);
-  const walkInIndexHeader = classifySheetHeaders(walkInCols).index;
-  if (walkInIndexHeader) walkInRequired.delete(walkInIndexHeader);
+  const walkInRequired = requiredSheetHeaders(walkInCols, populatedHeaders);
 
   return (
     <div className="h-full min-h-0 flex flex-col px-3 pt-3 pb-2 max-w-6xl mx-auto">
@@ -452,7 +455,7 @@ export default function AssistantHome() {
       {walkInOpen ? (
         <Modal wide title="Walk-in request" onClose={walkBusy ? undefined : () => { setWalkInOpen(false); setWalkInPhoto(null); }}>
           <p className="text-sm text-ink/70">
-            Fill the same columns as the hall list. Do not give the item until the hall admin approves this request.
+            Fill the same columns as the hall list. Columns that are empty on the list are optional. Do not give the item until the hall admin approves this request.
           </p>
           <form className="mt-4 space-y-3" onSubmit={submitWalkIn}>
             {walkInCols.map((header) => (

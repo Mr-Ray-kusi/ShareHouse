@@ -29,9 +29,9 @@ function initialValues(student, headers) {
   return values;
 }
 
-export default function StudentEditor({ student, headers = [], busy, onClose, onSave }) {
+export default function StudentEditor({ student, headers = [], rows = [], busy, onClose, onSave }) {
   const cols = headers.length ? headers : defaultSheetHeaders();
-  const required = useMemo(() => requiredSheetHeaders(cols), [cols]);
+  const required = useMemo(() => requiredSheetHeaders(cols, rows), [cols, rows]);
   const [values, setValues] = useState(() => initialValues(student, cols));
   const editing = Boolean(student?.id);
 
@@ -43,7 +43,7 @@ export default function StudentEditor({ student, headers = [], busy, onClose, on
     <Modal title={editing ? 'Edit student' : 'Add student'} onClose={busy ? undefined : onClose} wide>
       <p className="text-sm text-ink/70">
         {headers.length
-          ? 'These fields match the columns from the uploaded Excel sheet.'
+          ? 'These fields match the columns from the uploaded Excel sheet. Columns that are empty on the list are optional.'
           : 'Upload an Excel list first if you want this form to follow your sheet columns.'}
       </p>
       {editing && student.collected ? (

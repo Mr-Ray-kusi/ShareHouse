@@ -15,6 +15,17 @@ import {
   voidCollectionMark,
 } from '../services/collectionService.js';
 
+function populatedSheetHeaders(headers = [], rows = []) {
+  return (headers || []).filter((header) =>
+    (rows || []).some((row) => String((row.sheetRow || {})[header] || '').trim())
+  );
+}
+
+async function headerUsage(tenantId, distId, headers) {
+  const sample = await Beneficiary.find({ tenantId, distributionId: distId }).select('sheetRow').limit(400);
+  return populatedSheetHeaders(headers, sample);
+}
+
 async function resolveWorkingDistribution(req) {
   if (req.query.distributionId || req.body?.distributionId) {
     const id = req.query.distributionId || req.body.distributionId;
@@ -44,6 +55,7 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
 
   const headers = dist.sheetHeaders?.length ? dist.sheetHeaders : defaultHeaders();
   const assignment = await getAssistantAssignment(req);
+  const populatedHeaders = await headerUsage(req.tenantId, dist._id, headers);
   const meta = {
     distribution: {
       id: dist._id,
@@ -53,6 +65,7 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
       beneficiaryCount: dist.beneficiaryCount,
     },
     headers,
+    populatedHeaders,
     assignment,
     offline: false,
   };
@@ -137,6 +150,7 @@ export const offlinePack = asyncHandler(async (req, res) => {
       receivedCount: dist.receivedCount,
     },
     headers,
+    populatedHeaders: populatedSheetHeaders(headers, items),
     assignment,
     stats: statsFromDist(dist),
     truncated: items.length >= 8000,

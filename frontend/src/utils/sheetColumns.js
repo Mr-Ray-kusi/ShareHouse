@@ -19,6 +19,7 @@ const HEADER_HINTS = {
   otherName: ['other name', 'other names', 'middle name', 'middle names'],
   name: ['full name', 'fullname', 'student name', 'beneficiary', 'name of student', 'names'],
   level: ['level', 'year', 'class', 'lvl', 'programme year', 'academic year'],
+  dob: ['date of birth', 'dateofbirth', 'dob', 'd o b', 'birth date', 'birthdate', 'birthday', 'born'],
   phone: [
     'phone', 'phone number', 'mobile', 'mobile number', 'contact', 'contact number',
     'tel', 'telephone', 'whatsapp', 'cell', 'msisdn',
@@ -65,21 +66,35 @@ export function classifySheetHeaders(headers = []) {
     name: pick(HEADER_HINTS.name),
     phone: pick(HEADER_HINTS.phone),
     level: pick(HEADER_HINTS.level),
+    dob: pick(HEADER_HINTS.dob),
   };
   if (!roles.index && cols[0]) roles.index = cols[0];
   return roles;
 }
 
-export function requiredSheetHeaders(headers = []) {
+export function requiredSheetHeaders(headers = [], rows = []) {
   const roles = classifySheetHeaders(headers);
   const required = new Set();
-  if (roles.index) required.add(roles.index);
   if (roles.name) required.add(roles.name);
   else {
     if (roles.lastName) required.add(roles.lastName);
     if (roles.firstName) required.add(roles.firstName);
   }
+  const used = (rows || []).length && typeof rows[0] === 'string'
+    ? rows
+    : populatedSheetHeaders(headers, rows);
+  if (used.length) {
+    for (const header of [...required]) {
+      if (!used.includes(header)) required.delete(header);
+    }
+  }
   return required;
+}
+
+export function populatedSheetHeaders(headers = [], rows = []) {
+  return (headers || []).filter((header) =>
+    (rows || []).some((row) => String((row.sheetRow || {})[header] || '').trim())
+  );
 }
 
 export function fieldsFromSheetValues(values, headers = []) {

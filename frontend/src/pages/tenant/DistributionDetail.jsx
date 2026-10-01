@@ -309,6 +309,7 @@ export default function DistributionDetail() {
           key={editor.id || 'new'}
           student={editor.id ? editor : null}
           headers={headers}
+          rows={list}
           busy={busy}
           onClose={() => setEditor(null)}
           onSave={saveStudent}

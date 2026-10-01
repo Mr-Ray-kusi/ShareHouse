@@ -255,7 +255,8 @@ export const addBeneficiary = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Full name is required.' });
   }
   if (!payload.studentIndex) {
-    return res.status(400).json({ message: 'Student index is required.' });
+    const generated = `ADD-${Date.now().toString(36).toUpperCase()}`;
+    Object.assign(payload, beneficiaryPayload({ ...req.body, studentIndex: generated }, headers));
   }
   const duplicate = await findDuplicateIndex(req.tenantId, dist._id, payload.studentIndex);
   if (duplicate) {
