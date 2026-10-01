@@ -26,6 +26,7 @@ import {
   getPack,
   isNetworkError,
   listQueuedMarks,
+  listQueuedExceptions,
   queueCounts,
   searchPack,
 } from '../../offline/deskStore';
@@ -60,6 +61,7 @@ export default function AssistantHome() {
   const [assignment, setAssignment] = useState(null);
   const [populatedHeaders, setPopulatedHeaders] = useState([]);
   const [approvedQueue, setApprovedQueue] = useState([]);
+  const [noticeOpen, setNoticeOpen] = useState(false);
   const searchSeq = useRef(0);
   const pendingWalkInIds = useRef(new Set());
 
@@ -235,43 +237,72 @@ export default function AssistantHome() {
     }
   }
 
-  async function revealApprovedStudents() {
-    if (!approvedQueue.length) return;
-    const queued = approvedQueue;
-    setApprovedQueue([]);
+  async function lookupStudent(item) {
+    const needle = String(item.studentIndex || item.fullName || '').trim();
+    if (needle.length < 2) return null;
+    try {
+      const { data } = await api.get('/api/collections/search', { params: { q: needle } });
+      if (data.headers) setHeaders(data.headers);
+      if (data.populatedHeaders) setPopulatedHeaders(data.populatedHeaders);
+      if (data.distribution) setDistribution(data.distribution);
+      const results = data.results || [];
+      return results.find((row) => String(row.id) === String(item.beneficiaryId || item.id))
+        || results.find((row) => String(row.studentIndex || '').toUpperCase() === String(item.studentIndex || '').toUpperCase())
+        || null;
+    } catch (err) {
+      if (!isNetworkError(err)) return null;
+      const pack = await getPack();
+      const local = searchPack(pack, needle);
+      return local.find((row) => String(row.id) === String(item.beneficiaryId || item.id))
+        || local.find((row) => String(row.studentIndex || '').toUpperCase() === String(item.studentIndex || '').toUpperCase())
+        || null;
+    }
+  }
+
+  async function revealDeskStudents() {
+    const pending = walkIns.filter((row) => row.status === 'pending');
+    const approved = [
+      ...approvedQueue,
+      ...walkIns.filter((row) => row.status === 'approved'),
+    ];
     setError('');
     setLoading(true);
     searchSeq.current += 1;
     try {
+      const queuedMarks = (await listQueuedMarks()) || [];
+      const queuedWalkIns = (await listQueuedExceptions()) || [];
       const rows = [];
-      for (const item of queued) {
-        const needle = String(item.studentIndex || item.fullName || '').trim();
-        let match = null;
-        if (needle.length >= 2) {
-          try {
-            const { data } = await api.get('/api/collections/search', { params: { q: needle } });
-            if (data.headers) setHeaders(data.headers);
-            if (data.populatedHeaders) setPopulatedHeaders(data.populatedHeaders);
-            if (data.distribution) setDistribution(data.distribution);
-            const results = data.results || [];
-            match = results.find((row) => String(row.id) === String(item.beneficiaryId))
-              || results.find((row) => String(row.studentIndex || '').toUpperCase() === String(item.studentIndex || '').toUpperCase())
-              || null;
-          } catch (err) {
-            if (isNetworkError(err)) {
-              const pack = await getPack();
-              const local = searchPack(pack, needle);
-              match = local.find((row) => String(row.id) === String(item.beneficiaryId))
-                || local.find((row) => String(row.studentIndex || '').toUpperCase() === String(item.studentIndex || '').toUpperCase())
-                || null;
-            }
-          }
-        }
-        rows.push(match || exceptionAsStudent(item));
+      const seen = new Set();
+      function addRow(row) {
+        if (!row) return;
+        const key = String(row.id || row.beneficiaryId || '');
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        rows.push(row);
       }
+      for (const item of queuedMarks) {
+        const row = item.row || {};
+        addRow({
+          ...row,
+          id: item.beneficiaryId || item.id || row.id,
+          queued: true,
+          collected: Boolean(row.collected),
+        });
+      }
+      for (const item of approved) {
+        addRow((await lookupStudent(item)) || exceptionAsStudent(item));
+      }
+      for (const item of queuedWalkIns) {
+        addRow(exceptionAsStudent(item));
+      }
+      setApprovedQueue([]);
       setList(await mergeQueued(rows));
       setSearched(true);
       setQ('');
+      setNoticeOpen(true);
+      if (!rows.length && !pending.length) {
+        setError('No waiting or approved student to show yet.');
+      }
     } finally {
       setLoading(false);
     }
@@ -372,6 +403,13 @@ export default function AssistantHome() {
   const walkInCols = formSheetHeaders(headers, populatedHeaders);
   const walkInRequired = requiredSheetHeaders(walkInCols, walkInCols);
   const pendingWalkIns = walkIns.filter((row) => row.status === 'pending');
+  const approvedWalkIns = walkIns.filter((row) => row.status === 'approved');
+  const noticeCount = approvedWalkIns.length + pendingWalkIns.length + queue.marks + queue.exceptions;
+  const noticeLabel = approvedWalkIns.length
+    ? `${approvedWalkIns.length} approved walk-in${approvedWalkIns.length === 1 ? '' : 's'}. Tap to show`
+    : pendingWalkIns.length
+      ? `${pendingWalkIns.length} walk-in${pendingWalkIns.length === 1 ? '' : 's'} waiting. Tap to show`
+      : `${queue.marks} mark${queue.marks === 1 ? '' : 's'} and ${queue.exceptions} walk-in${queue.exceptions === 1 ? '' : 's'} waiting to sync. Tap to show`;
 
   return (
     <div className="h-full min-h-0 flex flex-col px-3 pt-3 pb-2 max-w-6xl mx-auto">
@@ -392,10 +430,17 @@ export default function AssistantHome() {
           <span className={`rounded-full px-2.5 py-1 font-semibold ${online ? 'bg-forest-100 text-forest-800' : 'bg-gold-400 text-ink'}`}>
             {online ? 'Online' : 'Offline — using the saved list'}
           </span>
-          {queue.marks + queue.exceptions > 0 ? (
-            <span className="rounded-full bg-gold-400 px-2.5 py-1 font-semibold text-ink">
-              {queue.marks} mark{queue.marks === 1 ? '' : 's'} and {queue.exceptions} walk-in{queue.exceptions === 1 ? '' : 's'} waiting to sync
-            </span>
+          {noticeCount > 0 ? (
+            <button
+              type="button"
+              className="relative rounded-full bg-gold-400 px-2.5 py-1 font-semibold text-ink"
+              onClick={revealDeskStudents}
+            >
+              {(approvedQueue.length || pendingWalkIns.length || approvedWalkIns.length) ? (
+                <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-gold-400 ring-2 ring-white animate-ping" />
+              ) : null}
+              {noticeLabel}
+            </button>
           ) : null}
         </div>
         {flash && (
@@ -409,24 +454,13 @@ export default function AssistantHome() {
           </div>
         )}
         <div className="relative">
-          {approvedQueue.length ? (
-            <button
-              type="button"
-              className="absolute -top-2 right-3 z-10 h-5 w-5"
-              title="A walk-in was approved. Tap to show the student."
-              onClick={revealApprovedStudents}
-            >
-              <span className="absolute inset-0 rounded-full bg-gold-400 animate-ping" />
-              <span className="relative block h-5 w-5 animate-bounce rounded-full bg-gold-400 ring-2 ring-white" />
-              <span className="sr-only">Show approved student</span>
-            </button>
-          ) : null}
           <SearchBar
           value={q}
           onChange={(next) => {
             searchSeq.current += 1;
             setQ(next);
             setSearched(false);
+            setNoticeOpen(false);
             setList([]);
             setLoading(false);
           }}
@@ -467,25 +501,58 @@ export default function AssistantHome() {
         {searched ? (
           <>
             <div className="md:hidden pb-4">
-              <ResultCards
-                headers={headers}
-                rows={list}
-                showMark
-                onMark={setConfirmRow}
-                busyId={busyId}
-                emptyMessage={assignment?.values?.length ? 'No student in your section matched that search.' : 'No student matched that search.'}
-              />
+              {list.length ? (
+                <ResultCards
+                  headers={headers}
+                  rows={list}
+                  showMark
+                  onMark={setConfirmRow}
+                  busyId={busyId}
+                />
+              ) : (!noticeOpen || !pendingWalkIns.length) ? (
+                <p className="p-4 text-sm text-ink/60">
+                  {noticeOpen
+                    ? 'No waiting or approved student to show yet.'
+                    : (assignment?.values?.length ? 'No student in your section matched that search.' : 'No student matched that search.')}
+                </p>
+              ) : null}
+              {noticeOpen && pendingWalkIns.length ? (
+                <div className={list.length ? 'mt-3' : ''}>
+                  <ExceptionPanel
+                    items={pendingWalkIns}
+                    compact
+                    onCancel={async (row) => {
+                      await api.post(`/api/exceptions/${row.id}/cancel`);
+                      await loadWalkIns();
+                    }}
+                  />
+                </div>
+              ) : null}
             </div>
             <div className="hidden md:block h-full">
-              <SheetTable
-                headers={headers}
-                rows={list}
-                showMark
-                onMark={setConfirmRow}
-                busyId={busyId}
-                fillHeight
-                emptyMessage={assignment?.values?.length ? 'No student in your section matched that search.' : 'No student matched that search.'}
-              />
+              {list.length ? (
+                <SheetTable
+                  headers={headers}
+                  rows={list}
+                  showMark
+                  onMark={setConfirmRow}
+                  busyId={busyId}
+                  fillHeight={!noticeOpen || !pendingWalkIns.length}
+                  emptyMessage={assignment?.values?.length ? 'No student in your section matched that search.' : 'No student matched that search.'}
+                />
+              ) : null}
+              {noticeOpen && pendingWalkIns.length ? (
+                <div className={list.length ? 'mt-3' : ''}>
+                  <ExceptionPanel
+                    items={pendingWalkIns}
+                    compact
+                    onCancel={async (row) => {
+                      await api.post(`/api/exceptions/${row.id}/cancel`);
+                      await loadWalkIns();
+                    }}
+                  />
+                </div>
+              ) : null}
             </div>
           </>
         ) : pendingWalkIns.length ? (
