@@ -372,7 +372,7 @@ export default function AssistantHome() {
             setLoading(false);
           }}
           onSearch={runSearch}
-          debounceMs={2000}
+          debounceMs={1000}
           placeholder={
             assignment?.values?.length
               ? `Search your ${assignment.column} students`
