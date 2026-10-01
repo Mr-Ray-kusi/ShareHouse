@@ -40,6 +40,7 @@ export default function ExceptionPanel({
   canReview = false,
   busyId = '',
   photoBase = '/api/exceptions',
+  compact = false,
   onApprove,
   onReject,
   onCancel,
@@ -50,8 +51,48 @@ export default function ExceptionPanel({
   }
 
   return (
-    <div className="space-y-3">
-      {items.map((row) => (
+    <div className={compact ? 'grid grid-cols-1 gap-2' : 'space-y-3'}>
+      {items.map((row) => {
+        const showPhoto = Boolean(row.hasPhoto) && row.status === 'pending' && !compact;
+        if (compact) {
+          return (
+            <article key={row.id} className="rounded-2xl bg-white border border-forest-100 shadow-lift p-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-forest-700/70">
+                {statusLabel(row.status)}
+              </p>
+              <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1">
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wider text-ink/45">Name</p>
+                  <p className="font-display text-base leading-tight truncate">{row.fullName}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wider text-ink/45">ID</p>
+                  <p className="text-sm font-semibold leading-tight truncate">{row.studentIndex || '—'}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wider text-ink/45">Level</p>
+                  <p className="text-sm leading-tight truncate">{row.level || '—'}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wider text-ink/45">Status</p>
+                  <p className="text-sm leading-tight truncate">{statusLabel(row.status)}</p>
+                </div>
+              </div>
+              {row.reason ? <p className="mt-1 text-xs text-ink/60 truncate">{row.reason}</p> : null}
+              {row.status === 'pending' && onCancel && !canReview ? (
+                <button
+                  type="button"
+                  className="btn-ghost mt-2 w-full py-2 text-sm"
+                  disabled={busyId === row.id}
+                  onClick={() => onCancel?.(row)}
+                >
+                  Cancel request
+                </button>
+              ) : null}
+            </article>
+          );
+        }
+        return (
         <article key={row.id} className="rounded-2xl border border-forest-100 bg-white p-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
@@ -79,7 +120,7 @@ export default function ExceptionPanel({
               {row.reviewNote && row.status !== 'pending' ? (
                 <p className="mt-1 text-xs text-ink/60">{row.reviewNote}</p>
               ) : null}
-              <PhotoThumb id={row.id} hasPhoto={row.hasPhoto} photoBase={photoBase} />
+              <PhotoThumb id={row.id} hasPhoto={showPhoto} photoBase={photoBase} />
             </div>
             <span className="rounded-full bg-mist px-2 py-1 text-xs font-semibold uppercase tracking-wider">
               {statusLabel(row.status)}
@@ -124,7 +165,8 @@ export default function ExceptionPanel({
             </button>
           ) : null}
         </article>
-      ))}
+        );
+      })}
     </div>
   );
 }

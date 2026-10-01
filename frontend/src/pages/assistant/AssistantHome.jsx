@@ -59,9 +59,26 @@ export default function AssistantHome() {
   const [walkBusy, setWalkBusy] = useState(false);
   const [assignment, setAssignment] = useState(null);
   const [populatedHeaders, setPopulatedHeaders] = useState([]);
-  const [approvalNotice, setApprovalNotice] = useState(false);
+  const [approvedQueue, setApprovedQueue] = useState([]);
   const searchSeq = useRef(0);
   const pendingWalkInIds = useRef(new Set());
+
+  function exceptionAsStudent(row) {
+    return {
+      id: row.beneficiaryId || row.id,
+      studentIndex: row.studentIndex,
+      fullName: row.fullName,
+      level: row.level,
+      phone: row.phone,
+      sheetRow: row.sheetRow || {},
+      collected: Boolean(row.markedOnApprove),
+    };
+  }
+
+  function rememberApproved(row) {
+    if (!row || row.status !== 'approved') return;
+    setApprovedQueue((prev) => [row, ...prev.filter((item) => item.id !== row.id)]);
+  }
 
   async function refreshQueue() {
     setQueue(await queueCounts());
@@ -93,8 +110,8 @@ export default function AssistantHome() {
       const { data } = await api.get('/api/exceptions', { params: { mine: 1 } });
       const items = data.exceptions || [];
       const prevPending = pendingWalkInIds.current;
-      if ([...prevPending].some((id) => items.find((row) => row.id === id && row.status === 'approved'))) {
-        setApprovalNotice(true);
+      for (const row of items) {
+        if (row.status === 'approved' && prevPending.has(row.id)) rememberApproved(row);
       }
       pendingWalkInIds.current = new Set(items.filter((row) => row.status === 'pending').map((row) => row.id));
       setWalkIns(items);
@@ -117,9 +134,7 @@ export default function AssistantHome() {
       });
       if (row.status === 'approved' && mine) {
         pendingWalkInIds.current.delete(row.id);
-        setApprovalNotice(true);
-        setFlash('A walk-in was approved. Search that student to verify.');
-        setTimeout(() => setFlash(null), 3200);
+        rememberApproved(row);
         hydratePackIfNeeded().catch(() => {});
       } else if (row.status === 'pending' && mine) {
         pendingWalkInIds.current.add(row.id);
@@ -220,6 +235,48 @@ export default function AssistantHome() {
     }
   }
 
+  async function revealApprovedStudents() {
+    if (!approvedQueue.length) return;
+    const queued = approvedQueue;
+    setApprovedQueue([]);
+    setError('');
+    setLoading(true);
+    searchSeq.current += 1;
+    try {
+      const rows = [];
+      for (const item of queued) {
+        const needle = String(item.studentIndex || item.fullName || '').trim();
+        let match = null;
+        if (needle.length >= 2) {
+          try {
+            const { data } = await api.get('/api/collections/search', { params: { q: needle } });
+            if (data.headers) setHeaders(data.headers);
+            if (data.populatedHeaders) setPopulatedHeaders(data.populatedHeaders);
+            if (data.distribution) setDistribution(data.distribution);
+            const results = data.results || [];
+            match = results.find((row) => String(row.id) === String(item.beneficiaryId))
+              || results.find((row) => String(row.studentIndex || '').toUpperCase() === String(item.studentIndex || '').toUpperCase())
+              || null;
+          } catch (err) {
+            if (isNetworkError(err)) {
+              const pack = await getPack();
+              const local = searchPack(pack, needle);
+              match = local.find((row) => String(row.id) === String(item.beneficiaryId))
+                || local.find((row) => String(row.studentIndex || '').toUpperCase() === String(item.studentIndex || '').toUpperCase())
+                || null;
+            }
+          }
+        }
+        rows.push(match || exceptionAsStudent(item));
+      }
+      setList(await mergeQueued(rows));
+      setSearched(true);
+      setQ('');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function patchRow(id, extra) {
     setList((prev) => prev.map((r) => (r.id === id ? { ...r, ...extra } : r)));
   }
@@ -314,6 +371,7 @@ export default function AssistantHome() {
 
   const walkInCols = formSheetHeaders(headers, populatedHeaders);
   const walkInRequired = requiredSheetHeaders(walkInCols, walkInCols);
+  const pendingWalkIns = walkIns.filter((row) => row.status === 'pending');
 
   return (
     <div className="h-full min-h-0 flex flex-col px-3 pt-3 pb-2 max-w-6xl mx-auto">
@@ -334,18 +392,6 @@ export default function AssistantHome() {
           <span className={`rounded-full px-2.5 py-1 font-semibold ${online ? 'bg-forest-100 text-forest-800' : 'bg-gold-400 text-ink'}`}>
             {online ? 'Online' : 'Offline — using the saved list'}
           </span>
-          {approvalNotice ? (
-            <button
-              type="button"
-              className="relative h-3.5 w-3.5 shrink-0"
-              title="A walk-in was approved"
-              onClick={() => setApprovalNotice(false)}
-            >
-              <span className="absolute inset-0 rounded-full bg-red-500 animate-ping" />
-              <span className="relative block h-3.5 w-3.5 animate-bounce rounded-full bg-red-600" />
-              <span className="sr-only">Walk-in approved</span>
-            </button>
-          ) : null}
           {queue.marks + queue.exceptions > 0 ? (
             <span className="rounded-full bg-gold-400 px-2.5 py-1 font-semibold text-ink">
               {queue.marks} mark{queue.marks === 1 ? '' : 's'} and {queue.exceptions} walk-in{queue.exceptions === 1 ? '' : 's'} waiting to sync
@@ -362,7 +408,20 @@ export default function AssistantHome() {
             <Ban size={16} /> {error}
           </div>
         )}
-        <SearchBar
+        <div className="relative">
+          {approvedQueue.length ? (
+            <button
+              type="button"
+              className="absolute -top-2 right-3 z-10 h-5 w-5"
+              title="A walk-in was approved. Tap to show the student."
+              onClick={revealApprovedStudents}
+            >
+              <span className="absolute inset-0 rounded-full bg-gold-400 animate-ping" />
+              <span className="relative block h-5 w-5 animate-bounce rounded-full bg-gold-400 ring-2 ring-white" />
+              <span className="sr-only">Show approved student</span>
+            </button>
+          ) : null}
+          <SearchBar
           value={q}
           onChange={(next) => {
             searchSeq.current += 1;
@@ -379,6 +438,7 @@ export default function AssistantHome() {
               : 'Search name, ID, or program'
           }
         />
+        </div>
         <p className="text-xs text-ink/60">
           {loading
             ? 'Searching…'
@@ -428,11 +488,12 @@ export default function AssistantHome() {
               />
             </div>
           </>
-        ) : walkIns.length ? (
+        ) : pendingWalkIns.length ? (
           <div className="mt-4">
             <h2 className="font-display text-xl mb-2">Your walk-ins</h2>
             <ExceptionPanel
-              items={walkIns}
+              items={pendingWalkIns}
+              compact
               onCancel={async (row) => {
                 await api.post(`/api/exceptions/${row.id}/cancel`);
                 await loadWalkIns();
