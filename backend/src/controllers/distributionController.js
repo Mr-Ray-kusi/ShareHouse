@@ -1,8 +1,8 @@
-import { Distribution, Beneficiary, Collection, SheetUpload } from '../models/index.js';
+import { Collection, CollectionVoid, Distribution, Beneficiary, SheetUpload, Invite, ListException } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { parseBeneficiaryWorkbook } from '../services/excelService.js';
 import { looksLikeStudentIndex, searchRegex } from '../utils/search.js';
-import { saveUploadBuffer } from '../utils/uploads.js';
+import { deleteStoredFile, saveUploadBuffer } from '../utils/uploads.js';
 import { track } from '../services/telemetry.js';
 import {
   forgetActiveDistribution,
@@ -108,6 +108,40 @@ export const setDistributionStatus = asyncHandler(async (req, res) => {
   forgetActiveDistribution(req.tenantId);
   if (status === 'active') rememberActiveDistribution(req.tenantId, dist);
   res.json({ distribution: dist });
+});
+
+export const deleteDistribution = asyncHandler(async (req, res) => {
+  const dist = await Distribution.findOne({ _id: req.params.id, tenantId: req.tenantId });
+  if (!dist) return res.status(404).json({ message: 'Distribution not found.' });
+  if (dist.status !== 'completed') {
+    return res.status(400).json({
+      message: 'Only a completed campaign can be removed. Mark it completed first.',
+    });
+  }
+
+  const tenantId = req.tenantId;
+  const distributionId = dist._id || dist.id;
+  const [uploads, exceptions] = await Promise.all([
+    SheetUpload.find({ tenantId, distributionId }),
+    ListException.find({ tenantId, distributionId }),
+  ]);
+  const files = [
+    dist.storedFileName,
+    ...uploads.map((row) => row.storedFileName),
+    ...exceptions.map((row) => row.photoFileName),
+  ].filter(Boolean);
+
+  await CollectionVoid.deleteMany({ tenantId, distributionId });
+  await ListException.deleteMany({ tenantId, distributionId });
+  await Collection.deleteMany({ tenantId, distributionId });
+  await Beneficiary.deleteMany({ tenantId, distributionId });
+  await SheetUpload.deleteMany({ tenantId, distributionId });
+  await Invite.updateMany({ tenantId, distributionId }, { $set: { distributionId: null } });
+  await Distribution.deleteMany({ _id: distributionId, tenantId });
+  forgetActiveDistribution(tenantId);
+  await Promise.all(files.map((name) => deleteStoredFile(name)));
+
+  return res.json({ message: `${dist.title} was removed.` });
 });
 
 export const previewBeneficiariesUpload = asyncHandler(async (req, res) => {

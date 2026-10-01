@@ -23,6 +23,7 @@ router.get('/', requireRoles('tenant_admin', 'super_admin'), dist.listDistributi
 router.post('/', requireRoles('tenant_admin'), dist.createDistribution);
 router.get('/active', requireRoles('tenant_admin', 'assistant', 'super_admin'), dist.getActiveDistribution);
 router.get('/:id', requireRoles('tenant_admin', 'super_admin'), dist.getDistribution);
+router.delete('/:id', requireRoles('tenant_admin'), dist.deleteDistribution);
 router.patch('/:id', requireRoles('tenant_admin'), dist.updateDistribution);
 router.patch('/:id/status', requireRoles('tenant_admin'), dist.setDistributionStatus);
 router.get('/:id/beneficiaries', requireRoles('tenant_admin', 'super_admin'), dist.listBeneficiaries);

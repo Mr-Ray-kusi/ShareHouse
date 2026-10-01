@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Trash2 } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import SheetTable from '../../components/SheetTable';
@@ -11,6 +12,7 @@ import ExceptionPanel, { reviewWalkIn } from '../../components/ExceptionPanel';
 
 export default function DistributionDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { tenant, supportMode } = useAuth();
   const isSrc = tenant?.subscriptionPlan === 'src';
   const [dist, setDist] = useState(null);
@@ -26,6 +28,7 @@ export default function DistributionDetail() {
   const [editor, setEditor] = useState(null);
   const [exceptions, setExceptions] = useState([]);
   const [exceptionBusy, setExceptionBusy] = useState('');
+  const [removing, setRemoving] = useState(false);
 
   async function load(search) {
     const { data } = await api.get(`/api/distributions/${id}/beneficiaries`, {
@@ -106,6 +109,23 @@ export default function DistributionDetail() {
       setError(err.response?.data?.message || 'Could not update status.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function removeCampaign() {
+    const ok = window.confirm(
+      `Remove “${dist.title}”? The student list and collection history for this completed campaign will be deleted.`
+    );
+    if (!ok) return;
+    setRemoving(true);
+    setError('');
+    try {
+      await api.delete(`/api/distributions/${id}`, { timeout: 120000 });
+      navigate('/app/distributions');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not remove that campaign.');
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -191,6 +211,12 @@ export default function DistributionDetail() {
           </label>
           <button className="btn-ghost" onClick={() => setEditor({})}>Add one student</button>
           <button className="btn-ghost" onClick={downloadTemplate}>Download Excel template (CSV)</button>
+          {dist.status === 'completed' ? (
+            <button type="button" className="btn-ghost text-red-700" disabled={busy || removing} onClick={removeCampaign}>
+              <Trash2 size={16} />
+              {removing ? 'Removing…' : 'Remove campaign'}
+            </button>
+          ) : null}
         </div>
       )}
       {uploadMsg && <p className="text-sm text-forest-700 mt-3">{uploadMsg}</p>}
