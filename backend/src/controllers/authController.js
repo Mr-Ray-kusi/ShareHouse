@@ -26,17 +26,69 @@ function clearRefreshCookie(res) {
   res.clearCookie('ws_refresh', { ...refreshCookieOptions(), maxAge: 0 });
 }
 
-async function issueSession(res, user, extras = {}) {
+function tokenExpiry(token) {
+  const raw = token?.expiresAt;
+  const at = raw instanceof Date ? raw : new Date(raw || 0);
+  return Number.isNaN(at.getTime()) ? new Date(0) : at;
+}
+
+function sessionLimitFor(role) {
+  if (role === 'assistant') return 1;
+  if (role === 'tenant_admin') return 2;
+  return Infinity;
+}
+
+function deviceLimitMessage(role) {
+  if (role === 'assistant') {
+    return 'This assistant is already signed in on another device. Sign out there first, or ask the hall president to set a new assistant password.';
+  }
+  return 'This hall login is already open on two devices. Sign out on one device before signing in here.';
+}
+
+function liveRefreshTokens(user) {
+  const now = Date.now();
+  return (user.refreshTokens || []).filter((token) => tokenExpiry(token).getTime() > now);
+}
+
+function replacingTokenHash(req, user) {
+  const cookie = req.cookies?.ws_refresh;
+  if (!cookie) return null;
+  try {
+    const payload = verifyRefreshToken(cookie);
+    if (String(payload.sub) !== String(user._id || user.id)) return null;
+    return hashToken(cookie);
+  } catch {
+    return null;
+  }
+}
+
+async function issueSession(res, user, extras = {}, options = {}) {
   const payload = accessPayload(user, extras);
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken({ sub: String(user._id) });
   const tokenHash = hashToken(refreshToken);
   const expiresAt = new Date(Date.now() + env.refreshTtlDays * 24 * 60 * 60 * 1000);
+  const replacingHash = options.replacingHash || null;
+  const limit = sessionLimitFor(user.role);
 
-  user.refreshTokens = (user.refreshTokens || [])
-    .filter((t) => t.expiresAt > new Date())
-    .slice(-8);
+  user.refreshTokens = liveRefreshTokens(user);
+  if (replacingHash) {
+    user.refreshTokens = user.refreshTokens.filter((token) => token.tokenHash !== replacingHash);
+  }
+
+  if (Number.isFinite(limit) && !options.rotateOnly && user.refreshTokens.length >= limit) {
+    const err = new Error(deviceLimitMessage(user.role));
+    err.status = 409;
+    err.code = 'DEVICE_LIMIT';
+    throw err;
+  }
+
   user.refreshTokens.push({ tokenHash, expiresAt });
+  if (Number.isFinite(limit) && user.refreshTokens.length > limit) {
+    user.refreshTokens = user.refreshTokens.slice(-limit);
+  } else if (!Number.isFinite(limit) && user.refreshTokens.length > 8) {
+    user.refreshTokens = user.refreshTokens.slice(-8);
+  }
   user.lastLogin = new Date();
   await user.save();
 
@@ -195,7 +247,7 @@ export const login = asyncHandler(async (req, res) => {
     return res.status(403).json({ message: 'This account has been deactivated.' });
   }
 
-  const session = await issueSession(res, user);
+  const session = await issueSession(res, user, {}, { replacingHash: replacingTokenHash(req, user) });
   track({ pillar: 'audience', name: 'login_success', tenantId: user.tenantId || '', role: user.role });
   return res.json({ message: 'Signed in.', ...session, tenant });
 });
@@ -280,7 +332,7 @@ export const joinAssistant = asyncHandler(async (req, res) => {
   await invite.save();
   await user.save();
 
-  const session = await issueSession(res, user);
+  const session = await issueSession(res, user, {}, { replacingHash: replacingTokenHash(req, user) });
   return res.json({
     message: 'Assistant signed in.',
     ...session,
@@ -310,9 +362,8 @@ export const refresh = asyncHandler(async (req, res) => {
     return res.status(401).json({ message: 'Refresh token invalid.' });
   }
 
-  user.refreshTokens = user.refreshTokens.filter((t) => t.tokenHash !== tokenHash);
   const tenant = user.tenantId ? await Tenant.findOne({ tenantId: user.tenantId }) : null;
-  const session = await issueSession(res, user);
+  const session = await issueSession(res, user, {}, { replacingHash: tokenHash, rotateOnly: true });
   return res.json({ ...session, tenant });
 });
 

@@ -155,6 +155,7 @@ export const setInvitePassword = asyncHandler(async (req, res) => {
   if (invite.assistantId) {
     await User.findByIdAndUpdate(invite.assistantId, {
       passwordHash: await User.hashPassword(password),
+      refreshTokens: [],
     });
   }
 
@@ -233,7 +234,7 @@ export const revokeInvite = asyncHandler(async (req, res) => {
   await invite.save();
 
   if (invite.assistantId) {
-    await User.findByIdAndUpdate(invite.assistantId, { isActive: false });
+    await User.findByIdAndUpdate(invite.assistantId, { isActive: false, refreshTokens: [] });
   }
 
   res.json({ message: 'Assistant access revoked.', invite });
@@ -264,7 +265,7 @@ export const deleteInvite = asyncHandler(async (req, res) => {
   }
 
   if (invite.assistantId) {
-    await User.findByIdAndUpdate(invite.assistantId, { isActive: false });
+    await User.findByIdAndUpdate(invite.assistantId, { isActive: false, refreshTokens: [] });
   }
   await Invite.deleteMany({ _id: invite._id, tenantId: req.tenantId });
   res.json({ message: 'Assistant deleted.' });
