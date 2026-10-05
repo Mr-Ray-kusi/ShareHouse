@@ -38,16 +38,13 @@ function sessionLimitFor(role) {
   return Infinity;
 }
 
-function deviceLimitMessage(role) {
-  if (role === 'assistant') {
-    return 'This assistant is already signed in on another device. Sign out there first, or ask the hall president to set a new assistant password.';
-  }
-  return 'This hall login is already open on two devices. Sign out on one device before signing in here.';
-}
-
 function liveRefreshTokens(user) {
   const now = Date.now();
   return (user.refreshTokens || []).filter((token) => tokenExpiry(token).getTime() > now);
+}
+
+function sortRefreshTokens(tokens) {
+  return [...(tokens || [])].sort((a, b) => tokenExpiry(a).getTime() - tokenExpiry(b).getTime());
 }
 
 function replacingTokenHash(req, user) {
@@ -77,15 +74,12 @@ async function issueSession(res, user, extras = {}, options = {}) {
   }
 
   if (Number.isFinite(limit) && !options.rotateOnly && user.refreshTokens.length >= limit) {
-    const err = new Error(deviceLimitMessage(user.role));
-    err.status = 409;
-    err.code = 'DEVICE_LIMIT';
-    throw err;
+    user.refreshTokens = sortRefreshTokens(user.refreshTokens).slice(-(limit - 1));
   }
 
   user.refreshTokens.push({ tokenHash, expiresAt });
   if (Number.isFinite(limit) && user.refreshTokens.length > limit) {
-    user.refreshTokens = user.refreshTokens.slice(-limit);
+    user.refreshTokens = sortRefreshTokens(user.refreshTokens).slice(-limit);
   } else if (!Number.isFinite(limit) && user.refreshTokens.length > 8) {
     user.refreshTokens = user.refreshTokens.slice(-8);
   }
