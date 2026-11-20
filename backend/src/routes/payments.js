@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import * as payments from '../controllers/paymentController.js';
-import { authenticate, requireRoles } from '../middleware/auth.js';
+import { authenticate, requireRoles, requireActiveTenant } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -9,8 +9,9 @@ router.get('/verify', payments.verify);
 router.post('/verify', payments.verify);
 router.get('/tenant/:tenantId', payments.publicTenantStatus);
 router.post(
-  '/initialize',
+  '/distributions/:distributionId/initialize',
   authenticate,
+  requireActiveTenant,
   requireRoles('tenant_admin'),
   payments.startPayment
 );

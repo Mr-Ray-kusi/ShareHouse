@@ -7,34 +7,26 @@ export default function PaymentCallback() {
   const [params] = useSearchParams();
   const { refreshMe, user } = useAuth();
   const [status, setStatus] = useState('verifying');
-  const [message, setMessage] = useState('Confirming Paystack payment…');
-  const [pendingApproval, setPendingApproval] = useState(false);
+  const [message, setMessage] = useState('Confirming campaign payment…');
+  const [distributionId, setDistributionId] = useState(params.get('distribution') || '');
 
   useEffect(() => {
     const reference = params.get('reference') || params.get('trxref');
     async function run() {
       try {
-        let pending = false;
-        if (reference) {
-          const { data } = await api.get('/api/payments/verify', { params: { reference } });
-          pending = Boolean(data.pendingApproval);
-          setMessage(
-            data.message
-            || (pending
-              ? 'Payment received. A system admin must approve this hall before you can sign in.'
-              : 'Payment confirmed.')
-          );
-        }
+        if (!reference) throw new Error('Paystack did not return a payment reference.');
+        const { data } = await api.get('/api/payments/verify', { params: { reference } });
+        if (data.distribution?._id) setDistributionId(String(data.distribution._id));
+        setMessage(data.message || 'Payment confirmed. The campaign is now active.');
         try {
           await refreshMe();
         } catch {
-          /* new halls stay signed out until a system admin approves */
+          /* A paid campaign remains active even if the session has expired. */
         }
-        setPendingApproval(pending);
         setStatus('ok');
       } catch (err) {
         setStatus('err');
-        setMessage(err.response?.data?.message || 'Could not verify payment. If you were charged, wait a moment — the webhook may still record the payment.');
+        setMessage(err.response?.data?.message || err.message || 'Could not verify payment. If you were charged, wait a moment and try again.');
       }
     }
     run();
@@ -45,12 +37,12 @@ export default function PaymentCallback() {
       <div className="card max-w-md w-full p-8 text-center">
         <p className="text-xs uppercase tracking-widest text-forest-700">Paystack</p>
         <h1 className="font-display text-3xl mt-2">
-          {status === 'ok' ? (pendingApproval || !user ? 'Payment received' : 'Hall activated') : status === 'err' ? 'Payment check' : 'Working…'}
+          {status === 'ok' ? 'Campaign payment confirmed' : status === 'err' ? 'Payment check' : 'Working…'}
         </h1>
         <p className="mt-3 text-sm text-ink/70">{message}</p>
         <div className="mt-6">
-          {user && !pendingApproval ? (
-            <Link to="/app" className="btn-primary">Open hall desk</Link>
+          {user && status === 'ok' ? (
+            <Link to={distributionId ? `/app/distributions/${distributionId}` : '/app'} className="btn-primary">Open campaign</Link>
           ) : (
             <Link to="/login" className="btn-primary">Back to sign in</Link>
           )}

@@ -1,47 +1,249 @@
-import { Tenant } from '../models/index.js';
+import { randomUUID } from 'crypto';
+import { Beneficiary, CampaignPayment, Distribution, Tenant } from '../models/index.js';
 import { env } from '../config/env.js';
-import { addYears } from '../utils/codes.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { track } from '../services/telemetry.js';
+import {
+  clearCampaignPayment,
+  STUDENT_FEE_PESEWAS,
+  activatePaidCampaign,
+} from '../services/campaignBilling.js';
 import {
   initializePayment,
   verifyPayment,
   verifyWebhookSignature,
 } from '../services/paystackService.js';
-
-async function markPaid(tenant, extra = {}) {
-  const alreadyPaid = Boolean(tenant.lastPaymentAt);
-  const alreadyApproved = Boolean(tenant.isActive);
-  tenant.expiryDate = addYears(new Date(), 1);
-  tenant.lastPaymentAt = new Date();
-  if (extra.customerCode) tenant.paystackCustomerCode = extra.customerCode;
-  if (extra.reference) tenant.paystackReference = extra.reference;
-  if (alreadyPaid || alreadyApproved) {
-    tenant.isActive = true;
-  }
-  await tenant.save();
-  return tenant;
-}
+import { getSb } from '../db/supabase.js';
+import { dbError } from '../db/model.js';
 
 export const startPayment = asyncHandler(async (req, res) => {
-  const tenant = await Tenant.findOne({ tenantId: req.tenantId });
-  if (!tenant) return res.status(404).json({ message: 'Tenant not found.' });
-
-  const callbackUrl = `${env.frontendUrl}/payment/callback?tenant=${tenant.tenantId}`;
-  const payment = await initializePayment({
-    email: tenant.adminEmail,
-    tenantId: tenant.tenantId,
-    planKey: tenant.subscriptionPlan,
-    callbackUrl,
+  const dist = await Distribution.findOne({
+    _id: req.params.distributionId,
+    tenantId: req.tenantId,
   });
-  tenant.paystackReference = payment.reference;
-  await tenant.save();
-  track({ pillar: 'funnel', name: 'payment_start', tenantId: tenant.tenantId, value: tenant.subscriptionFee });
-  return res.json({ payment, tenant });
+  if (!dist) return res.status(404).json({ message: 'Distribution not found.' });
+
+  const studentCount = await Beneficiary.countDocuments({
+    tenantId: req.tenantId,
+    distributionId: dist._id,
+  });
+  if (!studentCount) {
+    return res.status(400).json({ message: 'Upload a student list before paying to activate this campaign.' });
+  }
+  const amountPesewas = studentCount * STUDENT_FEE_PESEWAS;
+  if (!Number.isSafeInteger(amountPesewas)) {
+    return res.status(400).json({ message: 'This student list is too large to calculate a valid payment.' });
+  }
+  if (dist.paymentStatus === 'paid' && dist.paymentStudentCount === studentCount && dist.paymentAmount === amountPesewas) {
+    return res.json({ distribution: dist, alreadyPaid: true });
+  }
+  if (dist.status === 'active' && dist.paymentStudentCount !== studentCount) {
+    return res.status(409).json({
+      message: 'This campaign is already active. Complete it before changing its paid student count.',
+    });
+  }
+  if (dist.paymentStatus === 'pending') {
+    if (dist.paymentStudentCount !== studentCount || dist.paymentAmount !== amountPesewas) {
+      return res.status(409).json({
+        message: 'The pending payment no longer matches this list. Contact support before trying again.',
+      });
+    }
+    if (dist.paymentUrl) {
+      return res.json({
+        payment: { authorization_url: dist.paymentUrl, reference: dist.paymentReference },
+        distribution: dist,
+      });
+    }
+    if (Date.now() - new Date(dist.updatedAt || 0).getTime() < 120_000) {
+      return res.status(409).json({
+        message: 'Campaign payment is being initialized. Wait a moment and try again.',
+      });
+    }
+    clearCampaignPayment(dist);
+    await dist.save();
+  }
+  if (dist.paymentStatus === 'paid') {
+    clearCampaignPayment(dist);
+    await dist.save();
+  }
+
+  const reservationReference = `init:${randomUUID()}`;
+  const { data: reserved, error: reserveError } = await getSb()
+    .from('distributions')
+    .update({
+      paymentStatus: 'pending',
+      paymentAmount: amountPesewas,
+      paymentStudentCount: studentCount,
+      paymentReference: reservationReference,
+      paymentUrl: '',
+      paymentPaidAt: null,
+      beneficiaryCount: studentCount,
+      updatedAt: new Date().toISOString(),
+    })
+    .eq('id', dist._id)
+    .eq('tenantId', req.tenantId)
+    .eq('paymentStatus', 'unpaid')
+    .select()
+    .maybeSingle();
+  if (reserveError) throw dbError(reserveError);
+  if (!reserved) {
+    const latest = await Distribution.findOne({ _id: dist._id, tenantId: req.tenantId });
+    if (
+      latest?.paymentStatus === 'pending'
+      && latest.paymentStudentCount === studentCount
+      && latest.paymentAmount === amountPesewas
+      && latest.paymentUrl
+    ) {
+      return res.json({
+        payment: { authorization_url: latest.paymentUrl, reference: latest.paymentReference },
+        distribution: latest,
+      });
+    }
+    return res.status(409).json({
+      message: 'Another campaign payment started at the same time. Refresh and try again.',
+    });
+  }
+
+  const callbackUrl = `${env.frontendUrl}/payment/callback?distribution=${encodeURIComponent(String(dist._id))}`;
+  let payment;
+  try {
+    payment = await initializePayment({
+      email: req.user.email,
+      tenantId: req.tenantId,
+      distributionId: String(dist._id),
+      studentCount,
+      amountPesewas,
+      callbackUrl,
+    });
+  } catch (err) {
+    const { error } = await getSb()
+      .from('distributions')
+      .update({
+        paymentStatus: 'unpaid',
+        paymentAmount: 0,
+        paymentStudentCount: 0,
+        paymentReference: '',
+        paymentUrl: '',
+        paymentPaidAt: null,
+        updatedAt: new Date().toISOString(),
+      })
+      .eq('id', dist._id)
+      .eq('paymentReference', reservationReference);
+    if (error) console.error('Failed to release campaign payment reservation', error.message);
+    throw err;
+  }
+  const { data: saved, error } = await getSb()
+    .from('distributions')
+    .update({
+      paymentStatus: 'pending',
+      paymentAmount: amountPesewas,
+      paymentStudentCount: studentCount,
+      paymentReference: payment.reference,
+      paymentUrl: payment.authorization_url,
+      paymentPaidAt: null,
+      beneficiaryCount: studentCount,
+      updatedAt: new Date().toISOString(),
+    })
+    .eq('id', dist._id)
+    .eq('tenantId', req.tenantId)
+    .eq('paymentStatus', 'pending')
+    .eq('paymentReference', reservationReference)
+    .select()
+    .maybeSingle();
+  if (error) throw dbError(error);
+  if (!saved) {
+    const latest = await Distribution.findOne({ _id: dist._id, tenantId: req.tenantId });
+    if (
+      latest?.paymentStatus === 'pending'
+      && latest.paymentStudentCount === studentCount
+      && latest.paymentAmount === amountPesewas
+      && latest.paymentUrl
+    ) {
+      return res.json({
+        payment: { authorization_url: latest.paymentUrl, reference: latest.paymentReference },
+        distribution: latest,
+      });
+    }
+    return res.status(409).json({
+      message: 'Another campaign payment started at the same time. Refresh and try again.',
+    });
+  }
+  track({
+    pillar: 'funnel',
+    name: 'payment_start',
+    tenantId: req.tenantId,
+    value: amountPesewas / 100,
+  });
+  const updated = await Distribution.findOne({ _id: dist._id, tenantId: req.tenantId });
+  return res.json({ payment, distribution: updated });
 });
 
+async function applyCampaignPayment(data, reference) {
+  const dist = await Distribution.findOne({ paymentReference: reference });
+  if (!dist) return null;
+  if (dist.paymentStatus === 'paid') return dist;
+  if (dist.paymentStatus !== 'pending') return null;
+
+  const metadata = data.metadata || {};
+  const correctPayment = (
+    data.status === 'success'
+    && data.reference === reference
+    && data.currency === 'GHS'
+    && Number(data.amount) === Number(dist.paymentAmount)
+    && String(metadata.tenantId || '') === dist.tenantId
+    && String(metadata.distributionId || '') === String(dist._id)
+    && Number(metadata.studentCount) === Number(dist.paymentStudentCount)
+    && Number(metadata.amountPesewas) === Number(dist.paymentAmount)
+  );
+  if (!correctPayment) return null;
+
+  const currentCount = await Beneficiary.countDocuments({
+    tenantId: dist.tenantId,
+    distributionId: dist._id,
+  });
+  if (currentCount !== dist.paymentStudentCount) return null;
+
+  const paidAt = new Date();
+  try {
+    await CampaignPayment.create({
+      tenantId: dist.tenantId,
+      distributionId: dist._id,
+      reference,
+      studentCount: dist.paymentStudentCount,
+      amount: dist.paymentAmount,
+      currency: 'GHS',
+      paidAt,
+    });
+  } catch (err) {
+    if (err.code !== 11000) throw err;
+    const recorded = await CampaignPayment.findOne({ reference });
+    if (
+      !recorded
+      || recorded.tenantId !== dist.tenantId
+      || String(recorded.distributionId) !== String(dist._id)
+      || recorded.amount !== dist.paymentAmount
+    ) {
+      throw err;
+    }
+  }
+
+  dist.paymentStatus = 'paid';
+  dist.paymentPaidAt = paidAt;
+  dist.paymentUrl = '';
+  await dist.save();
+  const activated = await activatePaidCampaign(dist);
+  track({
+    pillar: 'funnel',
+    name: 'payment_success',
+    tenantId: dist.tenantId,
+    value: dist.paymentAmount / 100,
+  });
+  track({ pillar: 'health', name: 'paystack_success', tenantId: dist.tenantId });
+  return activated;
+}
+
 export const verify = asyncHandler(async (req, res) => {
-  const reference = req.query.reference || req.body?.reference;
+  const reference = String(req.query.reference || req.body?.reference || '').trim();
   if (!reference) {
     return res.status(400).json({ message: 'Payment reference is required.' });
   }
@@ -49,31 +251,20 @@ export const verify = asyncHandler(async (req, res) => {
   const data = await verifyPayment(reference);
   if (data.status !== 'success') {
     track({ pillar: 'health', name: 'paystack_fail', message: data.status || 'failed' });
-    return res.status(400).json({ message: 'Payment was not successful.', data });
+    return res.status(400).json({ message: 'Payment was not successful.' });
   }
 
-  const tenantId = data.metadata?.tenantId;
-  const tenant = tenantId
-    ? await Tenant.findOne({ tenantId })
-    : await Tenant.findOne({ paystackReference: reference });
-
-  if (!tenant) {
-    return res.status(404).json({ message: 'No hall matched this payment.' });
+  const distribution = await applyCampaignPayment(data, reference);
+  if (!distribution) {
+    return res.status(400).json({
+      message: 'This payment does not match a pending campaign and its current student list.',
+    });
   }
-
-  await markPaid(tenant, {
-    customerCode: data.customer?.customer_code,
-    reference: data.reference,
-  });
-  track({ pillar: 'funnel', name: 'payment_success', tenantId: tenant.tenantId, value: tenant.subscriptionFee });
-  track({ pillar: 'health', name: 'paystack_success', tenantId: tenant.tenantId });
-
   return res.json({
-    message: tenant.isActive
-      ? 'Subscription renewed for one year.'
-      : 'Payment received. A system admin must approve this hall before you can sign in.',
-    tenant,
-    pendingApproval: !tenant.isActive,
+    message: distribution.status === 'active'
+      ? 'Payment confirmed. The campaign is now active.'
+      : 'Payment confirmed. This campaign has since been replaced by another campaign.',
+    distribution,
   });
 });
 
@@ -87,21 +278,13 @@ export const webhook = asyncHandler(async (req, res) => {
   const event = req.body;
   if (event?.event === 'charge.success') {
     const data = event.data || {};
-    const tenantId = data.metadata?.tenantId;
-    const tenant = tenantId
-      ? await Tenant.findOne({ tenantId })
-      : await Tenant.findOne({ paystackReference: data.reference });
-
-    if (tenant && data.status === 'success') {
-      await markPaid(tenant, {
-        customerCode: data.customer?.customer_code,
-        reference: data.reference,
-      });
+    const distribution = await applyCampaignPayment(data, String(data.reference || ''));
+    if (distribution) {
       const io = req.app.get('io');
-      io?.to(`tenant:${tenant.tenantId}`).emit('tenant:paid', {
-        tenantId: tenant.tenantId,
-        expiryDate: tenant.expiryDate,
-        pendingApproval: !tenant.isActive,
+      io?.to(`tenant:${distribution.tenantId}`).emit('campaign:paid', {
+        tenantId: distribution.tenantId,
+        distributionId: String(distribution._id),
+        status: distribution.status,
       });
     }
   }

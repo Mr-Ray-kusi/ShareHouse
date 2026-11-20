@@ -102,11 +102,33 @@ export default function DistributionDetail() {
 
   async function setStatus(status) {
     setBusy(true);
+    setError('');
     try {
       const { data } = await api.patch(`/api/distributions/${id}/status`, { status });
       setDist(data.distribution);
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not update status.');
+      if (status === 'active' && err.response?.data?.code === 'CAMPAIGN_PAYMENT_REQUIRED') {
+        if (Number.isInteger(err.response.data.studentCount)) {
+          setDist((current) => ({ ...current, beneficiaryCount: err.response.data.studentCount }));
+        }
+        try {
+          const { data } = await api.post(`/api/payments/distributions/${id}/initialize`);
+          if (data.payment?.authorization_url) {
+            window.location.assign(data.payment.authorization_url);
+            return;
+          }
+          if (data.alreadyPaid) {
+            const { data: activeData } = await api.patch(`/api/distributions/${id}/status`, { status: 'active' });
+            setDist(activeData.distribution);
+          } else if (data.distribution) {
+            setDist(data.distribution);
+          }
+        } catch (paymentError) {
+          setError(paymentError.response?.data?.message || 'Could not start campaign payment.');
+        }
+      } else {
+        setError(err.response?.data?.message || 'Could not update status.');
+      }
     } finally {
       setBusy(false);
     }
@@ -187,6 +209,11 @@ export default function DistributionDetail() {
   }, [list, filters, headers, needle]);
 
   const pendingWalkIns = exceptions.filter((row) => row.status === 'pending');
+  const paymentMatchesList = (
+    dist?.paymentStatus === 'paid'
+    && dist.paymentStudentCount === dist.beneficiaryCount
+    && dist.paymentAmount === dist.beneficiaryCount * 5
+  );
 
   if (!dist) return <p className="text-ink/60">{error || 'Loading…'}</p>;
 
@@ -203,7 +230,13 @@ export default function DistributionDetail() {
           {dist.status === 'active' ? (
             <button className="btn-ghost" disabled={busy} onClick={() => setStatus('completed')}>Mark completed</button>
           ) : (
-            <button className="btn-primary" disabled={busy} onClick={() => setStatus('active')}>Make active</button>
+            <button className="btn-primary" disabled={busy} onClick={() => setStatus('active')}>
+              {busy
+                ? 'Preparing…'
+                : paymentMatchesList
+                  ? 'Activate paid campaign'
+                  : `Pay GHS ${(dist.beneficiaryCount * 0.05).toFixed(2)} and activate`}
+            </button>
           )}
           <label className="btn-gold cursor-pointer text-center">
             {busy ? 'Reading…' : 'Update Excel list'}
@@ -218,6 +251,13 @@ export default function DistributionDetail() {
             </button>
           ) : null}
         </div>
+      )}
+      {!supportMode && dist.status !== 'active' && (
+        <p className="mt-2 text-sm text-ink/60">
+          {paymentMatchesList
+            ? `Payment is confirmed for all ${dist.beneficiaryCount} students on this campaign.`
+            : `Campaign activation costs GHS 0.05 per student on the list (${dist.beneficiaryCount} students). Payment is required only when you activate the campaign.`}
+        </p>
       )}
       {uploadMsg && <p className="text-sm text-forest-700 mt-3">{uploadMsg}</p>}
       {error && <p className="text-sm text-red-700 mt-3">{error}</p>}

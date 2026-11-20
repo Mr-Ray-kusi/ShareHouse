@@ -50,12 +50,12 @@ export default function SuperAudience() {
             }))}
           />
         </Panel>
-        <Panel title="Plan & browser">
+        <Panel title="Account type & browser">
           <DonutChart
-            centerLabel="Halls"
+            centerLabel="Accounts"
             slices={[
-              { label: 'Hall plan', value: plan.hall || 0, color: '#2563eb' },
-              { label: 'SRC plan', value: plan.src || 0, color: '#0f172a' },
+              { label: 'Legacy hall accounts', value: plan.hall || 0, color: '#2563eb' },
+              { label: 'SRC accounts', value: plan.src || 0, color: '#0f172a' },
             ]}
           />
           <p className="text-xs text-slate-500 mt-4">

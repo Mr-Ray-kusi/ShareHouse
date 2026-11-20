@@ -12,11 +12,9 @@ import {
   verifyPasswordResetToken,
   verifyRefreshToken,
 } from '../utils/tokens.js';
-import { initializePayment } from '../services/paystackService.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { track } from '../services/telemetry.js';
 import { namesMatch } from '../utils/search.js';
-import { resolveSrcTenant } from '../utils/srcHalls.js';
 
 function setRefreshCookie(res, token) {
   res.cookie('ws_refresh', token, refreshCookieOptions());
@@ -99,7 +97,6 @@ export const register = asyncHandler(async (req, res) => {
     adminPhone,
     password,
     subscriptionPlan,
-    srcCode,
   } = req.body || {};
 
   if (!name || !schoolName || !adminName || !adminEmail || !adminPhone || !password || !subscriptionPlan) {
@@ -108,37 +105,16 @@ export const register = asyncHandler(async (req, res) => {
   if (String(password).length < 8) {
     return res.status(400).json({ message: 'Password must be at least 8 characters.' });
   }
+  if (subscriptionPlan !== 'src') {
+    return res.status(400).json({ message: 'Only the SRC plan is available for new accounts.' });
+  }
 
   const existingUser = await User.findOne({ email: String(adminEmail).toLowerCase() });
   if (existingUser) {
-    if (existingUser.role === 'tenant_admin' && existingUser.tenantId && (await existingUser.comparePassword(password))) {
-      const existingTenant = await Tenant.findOne({ tenantId: existingUser.tenantId });
-      if (existingTenant && !existingTenant.lastPaymentAt) {
-        const callbackUrl = `${env.frontendUrl}/payment/callback?tenant=${existingTenant.tenantId}`;
-        const payment = await initializePayment({
-          email: existingTenant.adminEmail,
-          tenantId: existingTenant.tenantId,
-          planKey: existingTenant.subscriptionPlan,
-          callbackUrl,
-        });
-        existingTenant.paystackReference = payment.reference;
-        await existingTenant.save();
-        return res.status(200).json({
-          message: 'Complete Paystack payment to finish registration.',
-          tenant: existingTenant,
-          payment,
-        });
-      }
-    }
     return res.status(409).json({ message: 'An account with this email already exists.' });
   }
 
   const plan = getPlan(subscriptionPlan);
-  let srcTenantId = null;
-  if (plan.key === 'hall' && String(srcCode || '').trim()) {
-    const src = await resolveSrcTenant(srcCode);
-    srcTenantId = src.tenantId;
-  }
   const tenantId = await uniqueTenantId(Tenant, name, schoolName);
   let joinCode = generateInviteCode(name);
   while (await Tenant.exists({ joinCode })) {
@@ -152,11 +128,10 @@ export const register = asyncHandler(async (req, res) => {
     adminEmail: String(adminEmail).toLowerCase().trim(),
     adminPhone: String(adminPhone).trim(),
     subscriptionPlan: plan.key,
-    subscriptionFee: plan.fee,
-    isActive: false,
+    subscriptionFee: 0,
+    isActive: true,
     expiryDate: addYears(new Date(), 1),
     joinCode,
-    ...(srcTenantId ? { srcTenantId } : {}),
   });
 
   const passwordHash = await User.hashPassword(password);
@@ -167,33 +142,15 @@ export const register = asyncHandler(async (req, res) => {
     phone: tenant.adminPhone,
     passwordHash,
     role: 'tenant_admin',
-    isActive: false,
+    isActive: true,
   });
 
-  const callbackUrl = `${env.frontendUrl}/payment/callback?tenant=${tenantId}`;
-  let payment = null;
-  try {
-    payment = await initializePayment({
-      email: tenant.adminEmail,
-      tenantId,
-      planKey: plan.key,
-      callbackUrl,
-    });
-    tenant.paystackReference = payment.reference;
-    await tenant.save();
-  } catch (err) {
-    await User.deleteMany({ _id: user.id });
-    await Tenant.deleteMany({ tenantId });
-    err.status = err.status || 503;
-    err.message = err.message || 'Paystack payment could not be started. Account was not created.';
-    throw err;
-  }
-
   track({ pillar: 'funnel', name: 'register', tenantId, value: plan.fee });
+  const session = await issueSession(res, user);
   return res.status(201).json({
-    message: 'Complete Paystack payment to finish registration. A system admin will then approve your login.',
+    message: 'SRC account created. You can upload a student list and pay when you are ready to activate a campaign.',
     tenant,
-    payment,
+    ...session,
   });
 });
 
@@ -222,16 +179,9 @@ export const login = asyncHandler(async (req, res) => {
     if (!tenant) {
       return res.status(404).json({ message: 'Hall not found for this account.' });
     }
-    if (!tenant.lastPaymentAt) {
-      return res.status(402).json({
-        message: 'Complete Paystack payment before this hall can be reviewed.',
-        code: 'PAYMENT_REQUIRED',
-        tenantId: tenant.tenantId,
-      });
-    }
     if (!tenant.isActive || !user.isActive) {
       return res.status(403).json({
-        message: 'Payment received. A system admin must approve this hall before you can sign in.',
+        message: 'A system admin must activate this account before you can sign in.',
         code: 'PENDING_APPROVAL',
       });
     }

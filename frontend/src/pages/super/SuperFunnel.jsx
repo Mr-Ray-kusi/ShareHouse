@@ -12,12 +12,12 @@ export default function SuperFunnel() {
       <PageIntro
         kicker="Pillar 3"
         title="Business funnel"
-        subtitle="Register → pay → upload list → first collection. Watch drop-off and conversion rate, not just totals. Payment drop-off is usually trust or Paystack."
+        subtitle="Register → upload a list → pay per student to activate → first collection. Signup is free; campaign payment is based on list size."
       />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <MetricCard icon={BadgePercent} label="Overall conversion" value={`${funnel.overallConversion || 0}%`} delta={funnel.conversionDelta} hint="Halls that collected ÷ registered" />
+        <MetricCard icon={BadgePercent} label="Overall conversion" value={`${funnel.overallConversion || 0}%`} delta={funnel.conversionDelta} hint="Accounts that collected ÷ registered" />
         <MetricCard icon={PackageCheck} label="Collected today" value={funnel.collectionsToday ?? 0} hint={`${funnel.pendingNow || 0} still pending on active lists`} />
-        <MetricCard accent icon={Coins} label="Revenue" value={`GHS ${funnel.revenue ?? 0}`} hint={`AOV GHS ${funnel.aov || 0} per paying hall`} />
+        <MetricCard accent icon={Coins} label="Campaign revenue" value={`GHS ${Number(funnel.revenue || 0).toFixed(2)}`} hint={`Average GHS ${Number(funnel.aov || 0).toFixed(2)} per paid campaign`} />
       </div>
 
       <div className="grid lg:grid-cols-[1.6fr_1fr] gap-4 mt-4">
@@ -56,7 +56,7 @@ export default function SuperFunnel() {
             })}
           </div>
           <p className="text-xs text-slate-400 mt-4">
-            Register to pay {funnel.registerToPay || 0}% · Pay to list {funnel.payToList || 0}% · List to collect {funnel.listToCollect || 0}%
+            Register to campaign payment {funnel.registerToPay || 0}% · List to payment {funnel.payToList || 0}% · List to collect {funnel.listToCollect || 0}%
           </p>
         </Panel>
         <Panel>
@@ -67,7 +67,7 @@ export default function SuperFunnel() {
 
       <div className="grid md:grid-cols-4 gap-4 mt-4">
         <MetricCard label="Registered" value={funnel.registered ?? 0} />
-        <MetricCard label="Paid" value={funnel.paid ?? 0} hint={`${funnel.registerToPay || 0}% of registered`} />
+        <MetricCard label="SRCs with paid campaigns" value={funnel.paid ?? 0} hint={`${funnel.registerToPay || 0}% of registered`} />
         <MetricCard label="Uploaded a list" value={funnel.hallsWithList ?? 0} hint={`${funnel.payToList || 0}% of paid`} />
         <MetricCard label="Started collecting" value={funnel.hallsWithCollection ?? 0} hint={`${funnel.listToCollect || 0}% of lists`} />
       </div>

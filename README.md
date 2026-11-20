@@ -1,6 +1,6 @@
 # ShareHouse
 
-Multi-tenant welfare distribution SaaS for Ghanaian tertiary halls and SRCs. Hall presidents upload a student list, send assistants into the field with unique join links, and watch collections live so the same student cannot collect twice.
+Multi-tenant welfare distribution SaaS for Ghanaian tertiary SRCs. SRC administrators upload student lists, send assistants into the field with unique join links, and watch collections live so the same student cannot collect twice.
 
 ## Stack
 
@@ -19,32 +19,40 @@ Every hall/SRC is a tenant (`tenantId` slug, e.g. `atlantic-hall-knust`). Users,
 
 | Role | Can |
 | --- | --- |
-| Super admin | All tenants, revenue, expiry, activate/deactivate, Support Mode (view-only) |
-| Tenant admin | Own hall only: distributions, Excel upload, assistant invites, live desk |
+| Super admin | All accounts, campaign revenue, activate/deactivate, Support Mode (view-only) |
+| Tenant admin | Own SRC account: distributions, Excel upload, assistant invites, live desk |
 | Assistant | Join link only: search + mark received. No menu, reports, or settings |
 
 Super admins **cannot** create distributions or mark beneficiaries, including in Support Mode.
 
-## Six collections
+## Core records
 
-1. **Tenant** — hall profile, plan (`hall` 500 / `src` 1500 GHS), `isActive`, `expiryDate`
+1. **Tenant** — SRC profile, account status, school and administrator details
 2. **User** — `super_admin` / `tenant_admin` / `assistant`, refresh token hashes
 3. **Distribution** — sharing event; only one `active` per tenant
-4. **Beneficiary** — list row for a distribution (index, name, level, phone)
-5. **Collection** — unique `(distributionId, beneficiaryId)` mark, with assistant + timestamp
-6. **Invite** — `/join/ATL-89XK2` codes with hashed passwords; revoke disables the assistant
+4. **CampaignPayment** — verified Paystack charge, reference, student count, and amount
+5. **Beneficiary** — list row for a distribution (index, name, level, phone)
+6. **Collection** — unique `(distributionId, beneficiaryId)` mark, with assistant + timestamp
+7. **Invite** — `/join/ATL-89XK2` codes with hashed passwords; revoke disables the assistant
+8. **Supporting records** — uploads, walk-in exceptions, collection voids, and system events
+
+## Campaign pricing
+
+Creating an SRC account and uploading a list are free. Campaign activation is charged at **GHS 0.05 per student** (5 pesewas per list row). The API counts the saved beneficiaries and calculates the amount in pesewas; a campaign remains inactive until Paystack confirms the exact amount, currency, campaign, and student count. A successful verified payment activates the campaign.
+
+Changing the number of people on an active campaign pauses it. A new payment matching the updated list is required before it can be activated again. List changes are blocked while a Paystack checkout is pending.
 
 ## Local setup
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. In the dashboard SQL Editor, run `backend/supabase/schema.sql`. Existing projects should also run `backend/supabase/share-day.sql` (safe list updates, mark voids, and walk-in requests).
+2. In the dashboard SQL Editor, run `backend/supabase/schema.sql`. On an existing project, run `backend/supabase/campaign-billing.sql` and `backend/supabase/share-day.sql`.
 3. Copy env files and fill in the project URL plus the **service role** key (Settings → API). Never put that key in the frontend.
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-4. Put your Paystack test keys in `backend/.env`. Leave them as placeholders only if you will activate halls from the super-admin desk.
+4. Put your Paystack test keys in `backend/.env`. They are needed when activating a campaign, not when creating an account.
 5. Install and run (two terminals):
 
 ```bash
@@ -68,7 +76,7 @@ Point Paystack to:
 
 `POST https://<your-api-host>/api/payments/webhook`
 
-Events used: `charge.success`. The signature header `x-paystack-signature` is verified with HMAC SHA512. The frontend callback at `/payment/callback` also verifies the reference as a backup.
+Events used: `charge.success`. The signature header `x-paystack-signature` is verified with HMAC SHA512. Payment references are tied to the tenant and campaign; the amount, GHS currency, and current beneficiary count are checked before activation. The frontend callback at `/payment/callback` verifies the reference as a backup.
 
 ## Excel columns
 
@@ -76,7 +84,7 @@ Events used: `charge.success`. The signature header `x-paystack-signature` is ve
 
 ## Deploy
 
-- **Database:** Supabase — run `backend/supabase/schema.sql`, then set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on the API host
+- **Database:** Supabase — run `backend/supabase/schema.sql` (or `backend/supabase/campaign-billing.sql` for an existing database), then set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on the API host
 - **API:** Render or Railway — set env vars from `backend/.env.example`, start command `npm start`, health `/api/health`
 - **Web:** Vercel or Netlify — build `npm run build`, output `dist`, set `VITE_API_URL` to the public API origin
 - Frontend `vercel.json` rewrites all routes to `index.html`

@@ -23,10 +23,7 @@ export default function ProtectedRoute({ children, roles }) {
     return <Navigate to="/app" replace />;
   }
 
-  const paywalled =
-    user.role === 'tenant_admin' &&
-    tenant &&
-    (!tenant.isActive || (tenant.expiryDate && new Date(tenant.expiryDate) < new Date()));
+  const paywalled = user.role === 'tenant_admin' && tenant && !tenant.isActive;
 
   if (paywalled && !location.pathname.startsWith('/paywall')) {
     return <Navigate to="/paywall" replace />;

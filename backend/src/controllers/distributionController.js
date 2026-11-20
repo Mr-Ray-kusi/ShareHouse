@@ -1,13 +1,20 @@
-import { Collection, CollectionVoid, Distribution, Beneficiary, SheetUpload, Invite, ListException } from '../models/index.js';
+import { Collection, CollectionVoid, Distribution, Beneficiary, SheetUpload, Invite, ListException, CampaignPayment } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { parseBeneficiaryWorkbook } from '../services/excelService.js';
 import { looksLikeStudentIndex, searchRegex } from '../utils/search.js';
 import { deleteStoredFile, saveUploadBuffer } from '../utils/uploads.js';
 import { track } from '../services/telemetry.js';
 import {
+  activatePaidCampaign,
+  clearCampaignPayment,
+  pauseCampaignForListChange,
+  requireNoPendingPayment,
+  STUDENT_FEE_PESEWAS,
+  syncCampaignAfterListChange,
+} from '../services/campaignBilling.js';
+import {
   forgetActiveDistribution,
   getActiveDistribution as loadActiveDistribution,
-  rememberActiveDistribution,
 } from '../services/activeDistribution.js';
 import {
   applyListUpload,
@@ -111,16 +118,44 @@ export const setDistributionStatus = asyncHandler(async (req, res) => {
   if (!dist) return res.status(404).json({ message: 'Distribution not found.' });
 
   if (status === 'active') {
-    await Distribution.updateMany(
-      { tenantId: req.tenantId, status: 'active', _id: { $ne: dist._id } },
-      { $set: { status: 'completed' } }
-    );
+    const count = await Beneficiary.countDocuments({
+      tenantId: req.tenantId,
+      distributionId: dist._id,
+    });
+    dist.beneficiaryCount = count;
+    if (!count) {
+      return res.status(400).json({ message: 'Upload a student list before activating this campaign.' });
+    }
+
+    const amountPesewas = count * STUDENT_FEE_PESEWAS;
+    if (
+      dist.paymentStatus !== 'paid'
+      || dist.paymentStudentCount !== count
+      || dist.paymentAmount !== amountPesewas
+    ) {
+      if (dist.paymentStatus === 'pending' && dist.paymentStudentCount !== count) {
+        return res.status(409).json({
+          message: 'The current student list does not match the pending payment.',
+        });
+      }
+      if (dist.paymentStatus === 'paid') clearCampaignPayment(dist);
+      await dist.save();
+      return res.status(402).json({
+        message: 'Pay GHS 0.05 per student to activate this campaign.',
+        code: 'CAMPAIGN_PAYMENT_REQUIRED',
+        studentCount: count,
+        ratePesewas: STUDENT_FEE_PESEWAS,
+        amountPesewas,
+        amountGhs: amountPesewas / 100,
+      });
+    }
+    await activatePaidCampaign(dist);
+    return res.json({ distribution: dist });
   }
 
   dist.status = status;
   await dist.save();
   forgetActiveDistribution(req.tenantId);
-  if (status === 'active') rememberActiveDistribution(req.tenantId, dist);
   res.json({ distribution: dist });
 });
 
@@ -146,6 +181,7 @@ export const deleteDistribution = asyncHandler(async (req, res) => {
   ].filter(Boolean);
 
   await CollectionVoid.deleteMany({ tenantId, distributionId });
+  await CampaignPayment.deleteMany({ tenantId, distributionId });
   await ListException.deleteMany({ tenantId, distributionId });
   await Collection.deleteMany({ tenantId, distributionId });
   await Beneficiary.deleteMany({ tenantId, distributionId });
@@ -178,6 +214,7 @@ export const previewBeneficiariesUpload = asyncHandler(async (req, res) => {
 
 export const uploadBeneficiaries = asyncHandler(async (req, res) => {
   const dist = await requireDistribution(req);
+  await requireNoPendingPayment(dist);
   const parsed = await parseUploadedWorkbook(req);
   const diff = await previewListUpload(dist, parsed.beneficiaries);
 
@@ -207,26 +244,22 @@ export const uploadBeneficiaries = asyncHandler(async (req, res) => {
     });
   }
 
+  const membershipChanged = diff.added.length > 0
+    || (removeMissing && diff.missingFromFile.length > 0);
+  if (membershipChanged && dist.status === 'active') {
+    await pauseCampaignForListChange(dist);
+  }
+
   const { dist: updated, diff: applied } = await applyListUpload(dist, parsed.beneficiaries, {
     headers: parsed.headers,
     removeMissing,
     resetMarks,
   });
 
+  if (membershipChanged) await syncCampaignAfterListChange(dist);
   updated.originalFileName = req.file.originalname;
   updated.storedFileName = await saveUploadBuffer(req.file.buffer, req.file.originalname);
-  if (updated.status === 'draft') {
-    await Distribution.updateMany(
-      { tenantId: req.tenantId, status: 'active', _id: { $ne: updated._id } },
-      { $set: { status: 'completed' } }
-    );
-    updated.status = 'active';
-    await updated.save();
-    forgetActiveDistribution(req.tenantId);
-    rememberActiveDistribution(req.tenantId, updated);
-  } else {
-    await updated.save();
-  }
+  await updated.save();
 
   await SheetUpload.create({
     tenantId: req.tenantId,
@@ -263,6 +296,7 @@ export const uploadBeneficiaries = asyncHandler(async (req, res) => {
 
 export const addBeneficiary = asyncHandler(async (req, res) => {
   const dist = await requireDistribution(req);
+  await requireNoPendingPayment(dist);
   const headers = await headersForDistribution(dist);
   const payload = beneficiaryPayload(req.body || {}, headers);
   if (!payload.fullName) {
@@ -280,12 +314,14 @@ export const addBeneficiary = asyncHandler(async (req, res) => {
     });
   }
 
+  await pauseCampaignForListChange(dist);
   const created = await Beneficiary.create({
     tenantId: req.tenantId,
     distributionId: dist._id,
     ...payload,
   });
   dist.sheetHeaders = headers;
+  clearCampaignPayment(dist);
   await refreshDistributionCounts(dist);
   track({ pillar: 'funnel', name: 'beneficiary_add', tenantId: req.tenantId || '' });
   res.status(201).json({
@@ -297,6 +333,7 @@ export const addBeneficiary = asyncHandler(async (req, res) => {
 
 export const updateBeneficiary = asyncHandler(async (req, res) => {
   const dist = await requireDistribution(req);
+  await requireNoPendingPayment(dist);
   const beneficiary = await Beneficiary.findOne({
     _id: req.params.beneficiaryId,
     tenantId: req.tenantId,
@@ -326,8 +363,11 @@ export const updateBeneficiary = asyncHandler(async (req, res) => {
     });
   }
 
+  const identityChanged = next.studentIndex !== beneficiary.studentIndex;
+  if (identityChanged) await pauseCampaignForListChange(dist);
   Object.assign(beneficiary, next);
   await beneficiary.save();
+  if (identityChanged) await syncCampaignAfterListChange(dist);
 
   const mark = await Collection.findOne({
     tenantId: req.tenantId,
@@ -353,6 +393,7 @@ export const updateBeneficiary = asyncHandler(async (req, res) => {
 
 export const removeBeneficiary = asyncHandler(async (req, res) => {
   const dist = await requireDistribution(req);
+  await requireNoPendingPayment(dist);
   const beneficiary = await Beneficiary.findOne({
     _id: req.params.beneficiaryId,
     tenantId: req.tenantId,
@@ -373,6 +414,8 @@ export const removeBeneficiary = asyncHandler(async (req, res) => {
     });
   }
 
+  await pauseCampaignForListChange(dist);
+  clearCampaignPayment(dist);
   if (mark) {
     await Collection.deleteMany({ _id: mark._id });
   }

@@ -3,11 +3,6 @@ import { Link, useOutletContext } from 'react-router-dom';
 import api from '../../api/client';
 import { PageIntro, Panel } from '../../components/super/SuperCharts';
 
-function fmtDate(d) {
-  if (!d) return '—';
-  return new Date(d).toLocaleDateString();
-}
-
 export default function SuperHalls() {
   const { analysis, search, reload, busy, setBusy, setError } = useOutletContext();
   const tenants = analysis?.tenants || [];
@@ -35,9 +30,9 @@ export default function SuperHalls() {
   return (
     <div>
       <PageIntro
-        kicker="Halls"
-        title="Registered Halls"
-        subtitle="Approve a hall after Paystack payment to turn on its login. Super admin does not enter live desks, distributions, or assistant tables."
+        kicker="SRC accounts"
+        title="Registered Accounts"
+        subtitle="Manage SRC login access and campaign payments. New accounts can register without paying; each campaign is billed when activated."
       />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div className="desk-card p-4">
@@ -49,8 +44,8 @@ export default function SuperHalls() {
           <p className="text-2xl font-semibold mt-1">{analysis?.kpis?.active ?? 0}</p>
         </div>
         <div className="desk-card p-4">
-          <p className="text-sm text-slate-500">Expired</p>
-          <p className="text-2xl font-semibold mt-1">{analysis?.kpis?.expired ?? 0}</p>
+          <p className="text-sm text-slate-500">Campaign payments</p>
+          <p className="text-2xl font-semibold mt-1">{analysis?.kpis?.campaignPayments ?? 0}</p>
         </div>
         <div className="desk-card p-4 bg-[#2563eb] text-white">
           <p className="text-sm text-white/80">Revenue</p>
@@ -62,41 +57,32 @@ export default function SuperHalls() {
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wider text-slate-400 border-b border-slate-100">
               <tr>
-                <th className="pb-3 pr-3">Hall</th>
-                <th className="pb-3 pr-3">Plan</th>
+                <th className="pb-3 pr-3">SRC / Account</th>
+                <th className="pb-3 pr-3">Type</th>
                 <th className="pb-3 pr-3">Status</th>
-                <th className="pb-3 pr-3">Expiry</th>
-                <th className="pb-3 pr-3">Fee</th>
+                <th className="pb-3 pr-3">Campaign revenue</th>
                 <th className="pb-3"></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((t) => {
-                const expired = t.expiryDate && new Date(t.expiryDate) < new Date();
-                const paid = Boolean(t.lastPaymentAt);
-                const status = !paid
-                  ? 'Awaiting payment'
-                  : t.isActive
-                    ? (expired ? 'Expired' : 'Active')
-                    : 'Awaiting approval';
+                const status = t.isActive ? 'Active' : 'Deactivated';
                 return (
                   <tr key={t.tenantId} className="border-b border-slate-50">
                     <td className="py-3 pr-3">
                       <Link to={`/super/tenants/${t.tenantId}`} className="font-semibold hover:text-[#2563eb]">{t.name}</Link>
                       <p className="text-xs text-slate-400">{t.schoolName} · {t.tenantId}</p>
                     </td>
-                    <td className="py-3 pr-3 capitalize">{t.subscriptionPlan}</td>
+                    <td className="py-3 pr-3 capitalize">{t.subscriptionPlan === 'src' ? 'SRC' : 'Legacy hall'}</td>
                     <td className="py-3 pr-3">{status}</td>
-                    <td className="py-3 pr-3">{fmtDate(t.expiryDate)}</td>
-                    <td className="py-3 pr-3">{t.subscriptionFee}</td>
+                    <td className="py-3 pr-3">GHS {(analysis?.campaignRevenueByTenant?.[t.tenantId] || 0).toFixed(2)}</td>
                     <td className="py-3 text-right">
                       <button
                         className="rounded-full px-3 py-1.5 text-xs font-semibold border border-slate-200 hover:bg-slate-50 disabled:opacity-50"
-                        disabled={busy === t.tenantId || (!t.isActive && !paid)}
-                        title={!paid ? 'Hall must pay with Paystack before approval' : ''}
+                        disabled={busy === t.tenantId}
                         onClick={() => toggle(t, !t.isActive)}
                       >
-                        {t.isActive ? 'Deactivate' : 'Approve login'}
+                        {t.isActive ? 'Deactivate' : 'Activate login'}
                       </button>
                     </td>
                   </tr>

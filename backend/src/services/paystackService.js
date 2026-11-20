@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { env, getPlan } from '../config/env.js';
+import { env } from '../config/env.js';
 
 const PAYSTACK_BASE = 'https://api.paystack.co';
 
@@ -12,6 +12,7 @@ async function paystackFetch(path, { method = 'GET', body } = {}) {
 
   const res = await fetch(`${PAYSTACK_BASE}${path}`, {
     method,
+    signal: AbortSignal.timeout(20_000),
     headers: {
       Authorization: `Bearer ${env.paystackSecret}`,
       'Content-Type': 'application/json',
@@ -28,9 +29,19 @@ async function paystackFetch(path, { method = 'GET', body } = {}) {
   return data;
 }
 
-export async function initializePayment({ email, tenantId, planKey, callbackUrl }) {
-  const plan = getPlan(planKey);
-  const amountPesewas = plan.fee * 100;
+export async function initializePayment({
+  email,
+  tenantId,
+  distributionId,
+  studentCount,
+  amountPesewas,
+  callbackUrl,
+}) {
+  if (!Number.isSafeInteger(amountPesewas) || amountPesewas <= 0) {
+    const err = new Error('Payment amount must be a positive whole number of pesewas.');
+    err.status = 400;
+    throw err;
+  }
   const payload = {
     email,
     amount: amountPesewas,
@@ -38,10 +49,13 @@ export async function initializePayment({ email, tenantId, planKey, callbackUrl 
     callback_url: callbackUrl,
     metadata: {
       tenantId,
-      plan: planKey,
+      distributionId,
+      studentCount,
+      amountPesewas,
       custom_fields: [
-        { display_name: 'Hall / SRC', variable_name: 'tenant_id', value: tenantId },
-        { display_name: 'Plan', variable_name: 'plan', value: planKey },
+        { display_name: 'SRC', variable_name: 'tenant_id', value: tenantId },
+        { display_name: 'Campaign', variable_name: 'distribution_id', value: distributionId },
+        { display_name: 'Students', variable_name: 'student_count', value: studentCount },
       ],
     },
   };

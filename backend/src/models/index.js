@@ -8,3 +8,4 @@ export { SheetUpload } from './SheetUpload.js';
 export { SystemEvent } from './SystemEvent.js';
 export { CollectionVoid } from './CollectionVoid.js';
 export { ListException } from './ListException.js';
+export { CampaignPayment } from './CampaignPayment.js';

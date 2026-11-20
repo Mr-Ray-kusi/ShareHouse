@@ -10,9 +10,9 @@ import {
   SystemEvent,
   Invite,
   ListException,
+  CampaignPayment,
 } from '../models/index.js';
 import { env } from '../config/env.js';
-import { addYears } from '../utils/codes.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { storedUploadPath, storedFileExists, deleteStoredFile, workbookFromBeneficiaries } from '../utils/uploads.js';
 import { signPasswordResetToken } from '../utils/tokens.js';
@@ -26,14 +26,14 @@ function sendExcel(res, buffer, filename) {
 }
 
 export const overview = asyncHandler(async (req, res) => {
-  const tenants = await Tenant.find().sort({ createdAt: -1 });
-  const now = new Date();
-  const active = tenants.filter((t) => t.isActive && t.expiryDate > now);
+  const [tenants, campaignPayments] = await Promise.all([
+    Tenant.find().sort({ createdAt: -1 }),
+    CampaignPayment.find().select('amount').lean(),
+  ]);
+  const active = tenants.filter((t) => t.isActive);
   const inactive = tenants.filter((t) => !t.isActive);
-  const expired = tenants.filter((t) => t.isActive && t.expiryDate <= now);
-  const revenue = tenants
-    .filter((t) => t.isActive || t.lastPaymentAt)
-    .reduce((sum, t) => sum + (t.subscriptionFee || 0), 0);
+  const revenuePesewas = campaignPayments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+  const revenue = revenuePesewas / 100;
   const uploadCount = await SheetUpload.countDocuments();
 
   res.json({
@@ -41,8 +41,9 @@ export const overview = asyncHandler(async (req, res) => {
       totalTenants: tenants.length,
       active: active.length,
       inactive: inactive.length,
-      expired: expired.length,
+      expired: 0,
       revenue,
+      campaignPayments: campaignPayments.length,
       uploads: uploadCount,
     },
     tenants,
@@ -145,8 +146,20 @@ export const getTenant = asyncHandler(async (req, res) => {
     Collection.countDocuments({ tenantId: tenant.tenantId }),
     SheetUpload.find({ tenantId: tenant.tenantId }).sort({ createdAt: -1 }),
   ]);
+  const campaignPayments = await CampaignPayment.find({ tenantId: tenant.tenantId })
+    .select('amount')
+    .lean();
 
-  res.json({ tenant, admins, assistants, distributions, collectionCount: collections, uploads });
+  res.json({
+    tenant,
+    admins,
+    assistants,
+    distributions,
+    collectionCount: collections,
+    campaignPayments: campaignPayments.length,
+    campaignRevenue: campaignPayments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0) / 100,
+    uploads,
+  });
 });
 
 export const setTenantActive = asyncHandler(async (req, res) => {
@@ -155,16 +168,7 @@ export const setTenantActive = asyncHandler(async (req, res) => {
   if (!tenant) return res.status(404).json({ message: 'Tenant not found.' });
 
   const wantActive = Boolean(isActive);
-  if (wantActive && !tenant.lastPaymentAt) {
-    return res.status(400).json({
-      message: 'This hall has not completed Paystack payment yet. Approval is only available after payment.',
-    });
-  }
-
   tenant.isActive = wantActive;
-  if (tenant.isActive && (!tenant.expiryDate || tenant.expiryDate < new Date())) {
-    tenant.expiryDate = addYears(new Date(), 1);
-  }
   await tenant.save();
 
   const admins = await User.find({ tenantId: tenant.tenantId, role: 'tenant_admin' });
@@ -177,8 +181,8 @@ export const setTenantActive = asyncHandler(async (req, res) => {
   res.json({
     tenant,
     message: tenant.isActive
-      ? 'Hall approved. The hall president can now sign in.'
-      : 'Hall deactivated. President logins are blocked.',
+      ? 'Account activated. The SRC administrator can now sign in.'
+      : 'Account deactivated. SRC administrator logins are blocked.',
   });
 });
 
@@ -271,10 +275,15 @@ export const deleteTenant = asyncHandler(async (req, res) => {
     ...exceptions.map((row) => row.photoFileName),
   ].filter(Boolean);
 
+  await Distribution.updateMany(
+    { tenantId },
+    { $set: { status: 'completed', paymentStatus: 'unpaid' } }
+  );
   await CollectionVoid.deleteMany({ tenantId });
   await ListException.deleteMany({ tenantId });
   await Collection.deleteMany({ tenantId });
   await Beneficiary.deleteMany({ tenantId });
+  await CampaignPayment.deleteMany({ tenantId });
   await SheetUpload.deleteMany({ tenantId });
   await Invite.deleteMany({ tenantId });
   await Distribution.deleteMany({ tenantId });
@@ -365,6 +374,7 @@ export const systemAnalysis = asyncHandler(async (req, res) => {
     collections,
     distributions,
     uploads,
+    campaignPayments,
     events14d,
   ] = await Promise.all([
     Tenant.find().lean(),
@@ -372,6 +382,7 @@ export const systemAnalysis = asyncHandler(async (req, res) => {
     Collection.find().select('tenantId collectedAt').lean(),
     Distribution.find().select('tenantId beneficiaryCount receivedCount status createdAt').lean(),
     SheetUpload.countDocuments(),
+    CampaignPayment.find().select('tenantId amount').lean(),
     SystemEvent.find({ createdAt: { $gte: prevWeekAgo } }).lean(),
   ]);
 
@@ -420,13 +431,21 @@ export const systemAnalysis = asyncHandler(async (req, res) => {
   const engagementRate = pct(engaged || Math.max(0, pageViews.length - 1), pageViews.length || 1);
 
   const registered = tenants.length;
-  const paid = tenants.filter((t) => t.isActive || t.lastPaymentAt).length;
+  const paidTenantIds = new Set(campaignPayments.map((payment) => payment.tenantId));
+  const paid = paidTenantIds.size;
   const withList = distributions.filter((d) => d.beneficiaryCount > 0).length;
   const hallsWithList = new Set(distributions.filter((d) => d.beneficiaryCount > 0).map((d) => d.tenantId)).size;
   const hallsWithCollection = new Set(collections.map((c) => c.tenantId)).size;
-  const revenue = tenants
-    .filter((t) => t.isActive || t.lastPaymentAt)
-    .reduce((s, t) => s + (t.subscriptionFee || 0), 0);
+  const revenuePesewas = campaignPayments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+  const revenue = revenuePesewas / 100;
+  const campaignRevenuePesewasByTenant = {};
+  campaignPayments.forEach((payment) => {
+    campaignRevenuePesewasByTenant[payment.tenantId] =
+      (campaignRevenuePesewasByTenant[payment.tenantId] || 0) + (Number(payment.amount) || 0);
+  });
+  const campaignRevenueByTenant = Object.fromEntries(
+    Object.entries(campaignRevenuePesewasByTenant).map(([tenantId, amount]) => [tenantId, amount / 100])
+  );
   const collectionsToday = collections.filter((c) => c.collectedAt && new Date(c.collectedAt) >= dayAgo).length;
   const pendingNow = distributions.reduce((s, d) => s + Math.max(0, (d.beneficiaryCount || 0) - (d.receivedCount || 0)), 0);
   const receivedNow = distributions.reduce((s, d) => s + (d.receivedCount || 0), 0);
@@ -459,8 +478,8 @@ export const systemAnalysis = asyncHandler(async (req, res) => {
     else if (e.browser) browsers.other += 1;
   });
 
-  const active = tenants.filter((t) => t.isActive && t.expiryDate && new Date(t.expiryDate) > now);
-  const expired = tenants.filter((t) => t.isActive && t.expiryDate && new Date(t.expiryDate) <= now);
+  const active = tenants.filter((t) => t.isActive);
+  const expired = [];
   const inactive = tenants.filter((t) => !t.isActive);
 
   const prevApi = eventsPrev7.filter((e) => e.name === 'api_call');
@@ -567,6 +586,7 @@ export const systemAnalysis = asyncHandler(async (req, res) => {
       inactive: inactive.length,
       expired: expired.length,
       revenue,
+      campaignPayments: campaignPayments.length,
       uploads,
     },
     health: {
@@ -608,20 +628,22 @@ export const systemAnalysis = asyncHandler(async (req, res) => {
       hallsWithList,
       hallsWithCollection,
       registerToPay: pct(paid, registered),
-      payToList: pct(hallsWithList, paid || registered),
+      payToList: pct(paid, hallsWithList || registered),
       listToCollect: pct(hallsWithCollection, hallsWithList || paid || registered),
       overallConversion: pct(hallsWithCollection, registered),
       conversionDelta: deltaPct(currCollect, prevCollect),
       revenue,
-      aov: paid ? Math.round(revenue / paid) : 0,
+      aov: campaignPayments.length
+        ? Math.round((revenue / campaignPayments.length) * 100) / 100
+        : 0,
       collectionsToday,
       receivedNow,
       pendingNow,
       withList,
       stages: [
         { name: 'Register', value: registered },
-        { name: 'Pay', value: paid },
         { name: 'Upload list', value: hallsWithList },
+        { name: 'Pay & activate', value: paid },
         { name: 'Collect', value: hallsWithCollection },
       ],
       series: collectSeries,
@@ -642,6 +664,7 @@ export const systemAnalysis = asyncHandler(async (req, res) => {
       series: collectSeries,
       weekStrip,
     },
+    campaignRevenueByTenant,
     tenants,
   });
 });

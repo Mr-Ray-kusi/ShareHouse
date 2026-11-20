@@ -89,26 +89,26 @@ export default function TenantDetail() {
 
   return (
     <div>
-      <Link to="/super/halls" className="text-sm text-[#2563eb] font-medium">← Registered Halls</Link>
+      <Link to="/super/halls" className="text-sm text-[#2563eb] font-medium">← Registered Accounts</Link>
       <PageIntro kicker={t.schoolName} title={t.name} subtitle={`${t.adminName} · ${t.adminEmail}`} />
       <div className="mb-4">
         <button
           className="rounded-full bg-[#2563eb] text-white text-xs font-semibold px-4 py-1.5 disabled:opacity-50"
-          disabled={statusBusy || (!t.isActive && !t.lastPaymentAt)}
+          disabled={statusBusy}
           onClick={() => setActive(!t.isActive)}
         >
-          {statusBusy ? 'Saving…' : t.isActive ? 'Deactivate login' : 'Approve login'}
+          {statusBusy ? 'Saving…' : t.isActive ? 'Deactivate login' : 'Activate login'}
         </button>
       </div>
       {notice && <p className="text-sm text-emerald-700 mb-4">{notice}</p>}
       {error && <p className="text-sm text-rose-600 mb-4">{error}</p>}
       <div className="grid md:grid-cols-3 gap-4">
-        <MetricCard icon={Coins} label="Plan" value={`${t.subscriptionPlan} · GHS ${t.subscriptionFee}`} />
+        <MetricCard icon={Coins} label="Campaign revenue" value={`GHS ${Number(data.campaignRevenue || 0).toFixed(2)}`} hint={`${data.campaignPayments || 0} successful campaign payment(s)`} />
         <MetricCard
           icon={BadgeCheck}
           label="Status"
-          value={!t.lastPaymentAt ? 'Awaiting payment' : t.isActive ? 'Active' : 'Awaiting approval'}
-          hint={`Expires ${t.expiryDate ? new Date(t.expiryDate).toLocaleDateString() : '—'}`}
+          value={t.isActive ? 'Active' : 'Deactivated'}
+          hint="Account access is managed by the system admin."
         />
         <MetricCard accent icon={Package} label="Collections" value={data.collectionCount} hint="Logged collections for this hall" />
       </div>

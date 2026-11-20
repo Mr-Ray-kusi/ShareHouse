@@ -49,8 +49,16 @@ function isPlainOp(value) {
 }
 
 export function dbError(error) {
-  const err = new Error(error?.message || 'Database error');
+  const message = error?.message || 'Database error';
+  const err = new Error(
+    error?.code === '23514' && message.startsWith('CAMPAIGN_BILLING_CONFLICT: ')
+      ? message.slice('CAMPAIGN_BILLING_CONFLICT: '.length)
+      : message
+  );
   err.code = error?.code === '23505' ? 11000 : error?.code;
+  if (error?.code === '23514' && message.startsWith('CAMPAIGN_BILLING_CONFLICT: ')) {
+    err.status = 409;
+  }
   err.details = error?.details;
   return err;
 }

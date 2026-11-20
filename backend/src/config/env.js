@@ -23,8 +23,7 @@ function normalizeSupabaseUrl(raw) {
 }
 
 export const PLANS = {
-  hall: { key: 'hall', fee: 500, label: 'Hall Plan' },
-  src: { key: 'src', fee: 1500, label: 'SRC Plan' },
+  src: { key: 'src', fee: 0, label: 'SRC Plan' },
 };
 
 function parseOrigins(raw) {
@@ -62,7 +61,7 @@ export const env = {
 export function getPlan(planKey) {
   const plan = PLANS[planKey];
   if (!plan) {
-    const err = new Error('Invalid subscription plan. Choose hall or src.');
+    const err = new Error('Invalid subscription plan. Choose src.');
     err.status = 400;
     throw err;
   }

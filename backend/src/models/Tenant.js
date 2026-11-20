@@ -34,7 +34,7 @@ export const Tenant = createModel({
   },
   methods: {
     hasAccess() {
-      return Boolean(this.isActive && this.expiryDate && new Date(this.expiryDate).getTime() > Date.now());
+      return Boolean(this.isActive);
     },
   },
 });

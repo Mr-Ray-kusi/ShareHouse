@@ -14,6 +14,12 @@ export const Distribution = createModel({
     'createdBy',
     'beneficiaryCount',
     'receivedCount',
+    'paymentStatus',
+    'paymentAmount',
+    'paymentStudentCount',
+    'paymentReference',
+    'paymentUrl',
+    'paymentPaidAt',
     'sheetHeaders',
     'originalFileName',
     'storedFileName',
@@ -21,7 +27,7 @@ export const Distribution = createModel({
     'updatedAt',
   ],
   uuidFields: ['createdBy'],
-  dateFields: ['startDate', 'endDate', 'createdAt', 'updatedAt'],
+  dateFields: ['startDate', 'endDate', 'paymentPaidAt', 'createdAt', 'updatedAt'],
   arrayFields: ['sheetHeaders'],
   virtuals: {
     pendingCount() {

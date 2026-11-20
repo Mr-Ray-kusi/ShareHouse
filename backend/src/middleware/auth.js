@@ -71,10 +71,8 @@ export async function requireActiveTenant(req, res, next) {
     }
     if (!tenant.hasAccess()) {
       return res.status(402).json({
-        message: tenant.isActive
-          ? 'This hall subscription has expired. Renew to continue.'
-          : 'This hall is not yet activated. Complete payment and wait for system admin approval.',
-        code: tenant.isActive ? 'SUBSCRIPTION_EXPIRED' : 'SUBSCRIPTION_INACTIVE',
+        message: 'This account has been deactivated. Contact the system admin.',
+        code: 'SUBSCRIPTION_INACTIVE',
       });
     }
     req.tenant = tenant;

@@ -108,27 +108,15 @@ export default function Landing() {
       </section>
 
       <section id="pricing" className="bg-white px-4 pb-8 pt-10">
-        <div className="mx-auto grid max-w-6xl gap-0 overflow-hidden rounded-[1.5rem] md:grid-cols-2">
-          <div className="bg-gold-400 px-8 py-10 text-left md:px-12">
-            <h3 className="text-2xl font-black uppercase md:text-3xl">Hall plan · GHS 500</h3>
-            <p className="mt-3 max-w-md text-sm text-ink/80">
-              One hall, one tenant, one year. Unlimited distributions, Excel upload, assistant links,
-              and a live collection desk.
-            </p>
-            <Link to="/register" className="mt-6 inline-flex rounded-full bg-ink px-6 py-2.5 text-xs font-bold uppercase tracking-[0.12em] text-white">
-              Choose Hall
-            </Link>
-          </div>
-          <div className="bg-[#c4920f] px-8 py-10 text-left md:px-12">
-            <h3 className="text-2xl font-black uppercase md:text-3xl">SRC plan · GHS 1,500</h3>
-            <p className="mt-3 max-w-md text-sm text-ink/80">
-              Campus-wide desk for the student body. Same toolkit, higher-volume lists, priority
-              activation after Paystack.
-            </p>
-            <Link to="/register" className="mt-6 inline-flex rounded-full bg-ink px-6 py-2.5 text-xs font-bold uppercase tracking-[0.12em] text-white">
-              Choose SRC
-            </Link>
-          </div>
+        <div className="mx-auto max-w-6xl overflow-hidden rounded-[1.5rem] bg-[#c4920f] px-8 py-10 text-left md:px-12">
+          <h3 className="text-2xl font-black uppercase md:text-3xl">SRC account · Free signup</h3>
+          <p className="mt-3 max-w-2xl text-sm text-ink/80">
+            Create an account and upload your student list at no cost. Pay GHS 0.05 per student
+            when you are ready to activate a campaign; the total is calculated from the uploaded list.
+          </p>
+          <Link to="/register" className="mt-6 inline-flex rounded-full bg-ink px-6 py-2.5 text-xs font-bold uppercase tracking-[0.12em] text-white">
+            Create SRC account
+          </Link>
         </div>
       </section>
 

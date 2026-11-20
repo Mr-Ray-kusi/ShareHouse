@@ -1,17 +1,15 @@
 import { Beneficiary, Collection, CollectionVoid, Distribution } from '../models/index.js';
-import { bumpReceivedCount, getActiveDistribution } from './activeDistribution.js';
+import { bumpReceivedCount } from './activeDistribution.js';
 import { presentBeneficiary, refreshDistributionCounts, statsFromDist } from './listService.js';
 
 export async function resolveActiveForBeneficiary(tenantId, beneficiary) {
-  let dist = await getActiveDistribution(tenantId);
-  const distId = String(beneficiary.distributionId);
-  if (!dist || String(dist._id) !== distId) {
-    dist = await Distribution.findOne({
-      _id: beneficiary.distributionId,
-      tenantId,
-    });
-  }
-  if (!dist || dist.status !== 'active') {
+  const dist = await Distribution.findOne({
+    _id: beneficiary.distributionId,
+    tenantId,
+    status: 'active',
+    paymentStatus: 'paid',
+  });
+  if (!dist) {
     const err = new Error('This distribution is not active.');
     err.status = 400;
     throw err;

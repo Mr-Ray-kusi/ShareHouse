@@ -13,6 +13,11 @@ import {
   resolveListHeaders,
 } from '../services/listService.js';
 import { createCollectionMark } from '../services/collectionService.js';
+import {
+  clearCampaignPayment,
+  pauseCampaignForListChange,
+  requireNoPendingPayment,
+} from '../services/campaignBilling.js';
 
 function walkInIndex() {
   const rand = crypto.randomBytes(2).toString('hex').toUpperCase();
@@ -225,11 +230,13 @@ export const reviewException = asyncHandler(async (req, res) => {
   if (!dist || dist.status !== 'active') {
     return res.status(400).json({ message: 'This distribution is not active.' });
   }
+  await requireNoPendingPayment(dist);
 
   const headers = await listHeaders(dist);
   let beneficiary = await findDuplicateIndex(req.tenantId, dist._id, row.studentIndex);
   const linkedExisting = Boolean(beneficiary);
   if (!beneficiary) {
+    await pauseCampaignForListChange(dist);
     const payload = beneficiaryPayload({
       studentIndex: row.studentIndex,
       fullName: row.fullName,
@@ -242,11 +249,12 @@ export const reviewException = asyncHandler(async (req, res) => {
       distributionId: dist._id,
       ...payload,
     });
+    clearCampaignPayment(dist);
     if ((dist.sheetHeaders || []).join('|') !== headers.join('|')) dist.sheetHeaders = headers;
     await refreshDistributionCounts(dist);
   }
 
-  const markReceived = Boolean(req.body?.markReceived);
+  const markReceived = Boolean(req.body?.markReceived) && linkedExisting;
   let markPayload = null;
   if (markReceived) {
     try {
@@ -268,7 +276,7 @@ export const reviewException = asyncHandler(async (req, res) => {
   row.reviewedByName = req.user.name;
   row.reviewNote = reviewNote || (linkedExisting ? 'Already on the list; linked.' : 'Approved');
   row.beneficiaryId = beneficiary._id;
-  row.markedOnApprove = markReceived;
+  row.markedOnApprove = Boolean(markPayload);
   await row.save();
 
   const payload = presentException(row);
@@ -278,7 +286,7 @@ export const reviewException = asyncHandler(async (req, res) => {
   res.json({
     message: linkedExisting
       ? `${row.fullName} was already on the list. Walk-in linked to that row.`
-      : `${row.fullName} was added to the list.`,
+      : `${row.fullName} was added to the list. Pay GHS 0.05 per student to reactivate the campaign before anyone collects.`,
     exception: payload,
     beneficiary: presentBeneficiary(beneficiary, markPayload?.collection, headers),
     collection: markPayload?.collection || null,
