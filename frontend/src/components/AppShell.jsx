@@ -1,6 +1,7 @@
-import { NavLink, Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { LayoutDashboard, Package, Users, LogOut, Building2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import PersistentOutlet from './PersistentOutlet';
 
 function BrandMark() {
   return (
@@ -46,7 +47,7 @@ export default function AppShell() {
           </button>
         </header>
         <div className="flex-1 min-h-0 overflow-hidden">
-          <Outlet />
+          <PersistentOutlet />
         </div>
       </div>
     );
@@ -119,7 +120,7 @@ export default function AppShell() {
           </button>
         </div>
         <main className="flex-1 min-h-0 overflow-y-auto px-4 pb-10 md:px-8">
-          <Outlet />
+          <PersistentOutlet />
         </main>
       </div>
     </div>

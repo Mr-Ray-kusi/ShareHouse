@@ -30,6 +30,7 @@ export default function Distributions() {
     setError('');
     try {
       const { data } = await api.post('/api/distributions', { title, itemName });
+      setItems((previous) => [data.distribution, ...previous]);
       setTitle('');
       setItemName('');
       navigate(`/app/distributions/${data.distribution._id}`);

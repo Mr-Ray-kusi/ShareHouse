@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Activity,
   MousePointerClick,
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import PersistentOutlet from '../PersistentOutlet';
 
 const LINKS = [
   { to: '/super/health', label: 'Health & performance', icon: Activity },
@@ -135,7 +136,7 @@ export default function SuperShell() {
 
         <main className="flex-1 min-h-0 overflow-y-auto px-4 md:px-8 pb-10">
           {error && <p className="text-sm text-rose-600 mb-4">{error}</p>}
-          <Outlet context={ctx} />
+          <PersistentOutlet context={ctx} />
         </main>
       </div>
     </div>

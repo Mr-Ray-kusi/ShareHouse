@@ -90,3 +90,9 @@ Events used: `charge.success`. The signature header `x-paystack-signature` is ve
 - Frontend `vercel.json` rewrites all routes to `index.html`
 
 Set `FRONTEND_URL` on the API to the deployed web origin, `COOKIE_SECURE=true`, and strong JWT secrets. The frontend still talks only to your API, not directly to Supabase.
+
+## Google Analytics through Google Tag Manager
+
+The frontend loads the Google Tag Manager container `GTM-M2D8LCBX` and sends a `sharehouse_page_view` data-layer event on each in-app route change. The event includes the path (without query parameters) and document title, so payment references in callback URLs are not sent as page-view data.
+
+To see these events in Google Analytics, publish a GA4 Google tag in that GTM container using your GA4 Measurement ID, then create a GA4 Event tag triggered by the custom event name `sharehouse_page_view`. Disable automatic page-view sending on the Google tag to avoid duplicate page views. The GTM container ID is not a GA4 Measurement ID.

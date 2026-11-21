@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { emitTelemetry, startErrorTracking, startWebVitals } from '../telemetry';
 
@@ -6,6 +6,7 @@ let started = false;
 
 export default function Telemetry() {
   const location = useLocation();
+  const lastGtmPath = useRef('');
 
   useEffect(() => {
     if (started) return undefined;
@@ -14,6 +15,17 @@ export default function Telemetry() {
     startWebVitals();
     return undefined;
   }, []);
+
+  useEffect(() => {
+    if (lastGtmPath.current === location.pathname) return;
+    lastGtmPath.current = location.pathname;
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({
+      event: 'sharehouse_page_view',
+      page_path: location.pathname,
+      page_title: document.title,
+    });
+  }, [location.pathname]);
 
   useEffect(() => {
     emitTelemetry({

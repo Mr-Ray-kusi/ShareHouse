@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import { Download, Printer } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api, { getAccessToken } from '../../api/client';
@@ -55,6 +55,7 @@ const VIEWS = {
 
 export default function TenantDashboard() {
   const { hallId } = useParams();
+  const { pathname } = useLocation();
   const { tenant } = useAuth();
   const monitor = Boolean(hallId);
   const isSrc = tenant?.subscriptionPlan === 'src';
@@ -122,6 +123,8 @@ export default function TenantDashboard() {
   }, [view]);
 
   useEffect(() => {
+    const activePath = hallId ? `/app/halls/${hallId}` : '/app';
+    if (pathname !== activePath) return undefined;
     const token = getAccessToken();
     if (!token) return undefined;
     const socket = io(apiOrigin() || undefined, {
@@ -177,7 +180,7 @@ export default function TenantDashboard() {
       });
     });
     return () => socket.disconnect();
-  }, [hallId]);
+  }, [hallId, pathname]);
 
   const stats = deskStats(data?.stats);
   const dist = data?.distribution;

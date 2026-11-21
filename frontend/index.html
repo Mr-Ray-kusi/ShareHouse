@@ -1,6 +1,19 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
+      (function (w, d, s, l, i) {
+        w[l] = w[l] || [];
+        var firstScript = d.getElementsByTagName(s)[0];
+        var tagScript = d.createElement(s);
+        var layerParam = l !== 'dataLayer' ? '&l=' + l : '';
+        tagScript.async = true;
+        tagScript.src = 'https://www.googletagmanager.com/gtm.js?id=' + i + layerParam;
+        firstScript.parentNode.insertBefore(tagScript, firstScript);
+      }(window, document, 'script', 'dataLayer', 'GTM-M2D8LCBX'));
+    </script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -25,6 +38,9 @@
     <title>ShareHouse — Fair sharing for every hall</title>
   </head>
   <body>
+    <noscript>
+      <iframe src="https://www.googletagmanager.com/ns.html?id=GTM-M2D8LCBX" height="0" width="0" style="display:none;visibility:hidden"></iframe>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
