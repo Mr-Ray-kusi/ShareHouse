@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import * as collections from '../controllers/collectionController.js';
 import { authenticate, requireRoles, requireActiveTenant, blockSupportWrites } from '../middleware/auth.js';
+import { requireStaffedHall } from '../services/assistantAssignment.js';
 
 const router = Router();
 router.use(authenticate, requireActiveTenant, blockSupportWrites);
+router.use(requireStaffedHall);
 router.get('/search', requireRoles('tenant_admin', 'assistant', 'super_admin'), collections.searchBeneficiaries);
 router.get('/offline-pack', requireRoles('tenant_admin', 'assistant', 'super_admin'), collections.offlinePack);
 router.get('/activity', requireRoles('tenant_admin', 'super_admin'), collections.activityFeed);

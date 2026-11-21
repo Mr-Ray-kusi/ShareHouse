@@ -497,16 +497,14 @@ export default function AssistantHome() {
                 ? `You can verify ${assignment.column} ${assignment.values.join(', ')}. Search the student in front of you, then confirm.`
                 : 'Search the student in front of you, then confirm before you verify.')}
         </p>
-        {searched ? (
-          <button type="button" className="btn-ghost text-xs" onClick={() => {
-            setWalkIn(blankWalkIn(headers));
-            setWalkInReason('');
-            setWalkInPhoto(null);
-            setWalkInOpen(true);
-          }}>
-            Not on the list? Request a walk-in
-          </button>
-        ) : null}
+        <button type="button" className="btn-ghost text-xs" onClick={() => {
+          setWalkIn(blankWalkIn(headers));
+          setWalkInReason('');
+          setWalkInPhoto(null);
+          setWalkInOpen(true);
+        }}>
+          Add student not on the list
+        </button>
       </div>
       <div className="flex-1 min-h-0 mt-2 overflow-y-auto md:overflow-hidden">
         {searched ? (
@@ -580,7 +578,7 @@ export default function AssistantHome() {
       {walkInOpen ? (
         <Modal wide title="Walk-in request" onClose={walkBusy ? undefined : () => { setWalkInOpen(false); setWalkInPhoto(null); }}>
           <p className="text-sm text-ink/70">
-            Fill the same columns as the hall list. Empty columns are not asked for. Do not give the item until the hall admin approves this request.
+            Fill the same columns as the student list. The SRC administrator must approve this request before the student can be verified.
           </p>
           <form className="mt-4 space-y-3" onSubmit={submitWalkIn}>
             {walkInCols.length ? walkInCols.map((header) => (

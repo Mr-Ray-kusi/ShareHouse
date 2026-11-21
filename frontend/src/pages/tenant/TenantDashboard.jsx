@@ -59,7 +59,7 @@ export default function TenantDashboard() {
   const { tenant } = useAuth();
   const monitor = Boolean(hallId);
   const isSrc = tenant?.subscriptionPlan === 'src';
-  const canReview = !monitor && !isSrc;
+  const canReview = monitor || isSrc;
   const hallApi = monitor ? `/api/src/halls/${hallId}` : '';
   const [data, setData] = useState(null);
   const [query, setQuery] = useState('');
@@ -275,19 +275,27 @@ export default function TenantDashboard() {
           <h2 className="font-display text-2xl">Walk-ins waiting</h2>
           <p className="text-sm text-ink/60 mt-1">
             {canReview
-              ? 'Approve from the live desk so the table can serve them.'
-              : 'SRC can monitor walk-ins. Only the hall president can approve a student.'}
+              ? monitor
+                ? 'Review requests for this hall. Approved students can then be verified by its assistants.'
+                : 'Approve requests submitted by your assistants. Approved students can then be verified.'
+              : 'Only the linked SRC administrator can approve or reject these requests.'}
           </p>
           <div className="mt-3">
             <ExceptionPanel
               items={exceptions}
               canReview={canReview}
+              allowMarkReceived={false}
               photoBase={monitor ? `${hallApi}/exceptions` : '/api/exceptions'}
               busyId={exceptionBusy}
               onApprove={async (row, markReceived) => {
                 setExceptionBusy(row.id);
                 try {
-                  await reviewWalkIn(row.id, 'approve', { markReceived });
+                  await reviewWalkIn(
+                    row.id,
+                    'approve',
+                    { markReceived },
+                    monitor ? `${hallApi}/exceptions/${row.id}/review` : undefined
+                  );
                   await loadExceptions();
                   await loadDesk();
                   listRequested.current = false;
@@ -301,7 +309,12 @@ export default function TenantDashboard() {
                 const note = window.prompt('Reason for rejecting this walk-in?', 'Not eligible') || 'Rejected';
                 setExceptionBusy(row.id);
                 try {
-                  await reviewWalkIn(row.id, 'reject', { note });
+                  await reviewWalkIn(
+                    row.id,
+                    'reject',
+                    { note },
+                    monitor ? `${hallApi}/exceptions/${row.id}/review` : undefined
+                  );
                   await loadExceptions();
                 } catch (err) {
                   setError(err.response?.data?.message || 'Could not reject that walk-in.');

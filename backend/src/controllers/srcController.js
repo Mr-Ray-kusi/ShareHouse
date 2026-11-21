@@ -4,7 +4,7 @@ import { getActiveDistribution } from '../services/activeDistribution.js';
 import { assertHallUnderSrc, isSrcTenant, listHallsForSrc } from '../utils/srcHalls.js';
 import { tenantDashboard } from './dashboardController.js';
 import { searchBeneficiaries } from './collectionController.js';
-import { exceptionPhoto, listExceptions } from './exceptionController.js';
+import { exceptionPhoto, listExceptions, reviewException } from './exceptionController.js';
 
 function requireSrc(req, res) {
   if (!isSrcTenant(req.tenant)) {
@@ -86,4 +86,15 @@ export const srcHallExceptions = asyncHandler(async (req, res, next) => {
 export const srcHallExceptionPhoto = asyncHandler(async (req, res, next) => {
   if (!requireSrc(req, res)) return;
   await withHall(req, req.params.tenantId, () => exceptionPhoto(req, res, next));
+});
+
+export const srcReviewHallException = asyncHandler(async (req, res, next) => {
+  if (!requireSrc(req, res)) return;
+  const srcTenantId = req.tenant.tenantId;
+  const hall = await assertHallUnderSrc(req.tenant, req.params.tenantId);
+  req.srcReview = true;
+  req.srcTenantId = srcTenantId;
+  req.tenantId = hall.tenantId;
+  req.tenant = hall;
+  await reviewException(req, res, next);
 });

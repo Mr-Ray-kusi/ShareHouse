@@ -4,6 +4,7 @@ export { Distribution } from './Distribution.js';
 export { Beneficiary } from './Beneficiary.js';
 export { Collection } from './Collection.js';
 export { Invite } from './Invite.js';
+export { HallAllocation } from './HallAllocation.js';
 export { SheetUpload } from './SheetUpload.js';
 export { SystemEvent } from './SystemEvent.js';
 export { CollectionVoid } from './CollectionVoid.js';

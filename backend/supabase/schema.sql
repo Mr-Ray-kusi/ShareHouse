@@ -161,6 +161,26 @@ create index if not exists invites_code_idx on public.invites (code);
 create index if not exists invites_tenant_active_idx on public.invites ("tenantId", "isActive");
 alter table public.invites add column if not exists "assignmentColumn" text not null default '';
 alter table public.invites add column if not exists "assignmentValues" text[] not null default '{}';
+alter table public.invites add column if not exists "hallId" uuid;
+
+create table if not exists public.hall_allocations (
+  id uuid primary key default gen_random_uuid(),
+  "tenantId" text not null,
+  name text not null,
+  "assignmentColumn" text not null,
+  "assignmentValue" text not null,
+  "createdBy" uuid not null,
+  "createdAt" timestamptz not null default now(),
+  "updatedAt" timestamptz not null default now(),
+  unique ("tenantId", name)
+);
+
+create index if not exists hall_allocations_tenant_idx
+  on public.hall_allocations ("tenantId", name);
+create unique index if not exists hall_allocations_assignment_value_uidx
+  on public.hall_allocations ("tenantId", "assignmentColumn", "assignmentValue");
+create index if not exists invites_hall_active_idx
+  on public.invites ("tenantId", "hallId", "isActive");
 
 create table if not exists public.sheet_uploads (
   id uuid primary key default gen_random_uuid(),
@@ -425,6 +445,7 @@ alter table public.campaign_payments enable row level security;
 alter table public.beneficiaries enable row level security;
 alter table public.collections enable row level security;
 alter table public.invites enable row level security;
+alter table public.hall_allocations enable row level security;
 alter table public.sheet_uploads enable row level security;
 alter table public.system_events enable row level security;
 alter table public.collection_voids enable row level security;

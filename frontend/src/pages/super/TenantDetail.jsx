@@ -16,11 +16,20 @@ export default function TenantDetail() {
   const [resetBusy, setResetBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [confirmId, setConfirmId] = useState('');
+  const [srcAccounts, setSrcAccounts] = useState([]);
+  const [srcTenantId, setSrcTenantId] = useState('');
+  const [srcLinkBusy, setSrcLinkBusy] = useState(false);
 
   useEffect(() => {
-    api
-      .get(`/api/super/tenants/${tenantId}`)
-      .then(({ data: d }) => setData(d))
+    Promise.all([
+      api.get(`/api/super/tenants/${tenantId}`),
+      api.get('/api/super/src-accounts'),
+    ])
+      .then(([{ data: d }, { data: srcData }]) => {
+        setData(d);
+        setSrcAccounts(srcData.srcAccounts || []);
+        setSrcTenantId(d.tenant.srcTenantId || '');
+      })
       .catch((err) => setError(err.response?.data?.message || 'Not found.'));
   }, [tenantId]);
 
@@ -46,6 +55,22 @@ export default function TenantDetail() {
       setError(err.response?.data?.message || 'Update failed.');
     } finally {
       setStatusBusy(false);
+    }
+  }
+
+  async function saveSrcLink(e) {
+    e.preventDefault();
+    setSrcLinkBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const { data: d } = await api.patch(`/api/super/tenants/${tenantId}/src-link`, { srcTenantId });
+      setData((prev) => ({ ...prev, tenant: d.tenant }));
+      setNotice(d.message);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not update the SRC link.');
+    } finally {
+      setSrcLinkBusy(false);
     }
   }
 
@@ -147,6 +172,34 @@ export default function TenantDetail() {
           {resetBusy ? 'Sending…' : 'Send reset email'}
         </button>
       </Panel>
+      {t.subscriptionPlan !== 'src' ? (
+        <Panel title="Campus SRC link" className="mt-4">
+          <p className="text-sm text-slate-500">
+            Only explicitly linked halls are visible to an SRC account. Verify the relationship before linking it.
+          </p>
+          <form className="mt-3 flex flex-col gap-2 sm:flex-row" onSubmit={saveSrcLink}>
+            <select
+              className="w-full max-w-md rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={srcTenantId}
+              onChange={(e) => setSrcTenantId(e.target.value)}
+              disabled={srcLinkBusy}
+            >
+              <option value="">Not linked</option>
+              {srcAccounts.map((src) => (
+                <option key={src.tenantId} value={src.tenantId}>
+                  {src.schoolName} · {src.name} ({src.tenantId})
+                </option>
+              ))}
+            </select>
+            <button
+              className="rounded-full bg-[#2563eb] text-white text-xs font-semibold px-4 py-1.5 disabled:opacity-50"
+              disabled={srcLinkBusy}
+            >
+              {srcLinkBusy ? 'Saving…' : 'Save SRC link'}
+            </button>
+          </form>
+        </Panel>
+      ) : null}
       <Panel title={`Delete ${kind.toLowerCase()} account`} className="mt-4">
         <p className="text-sm text-slate-500">
           Permanently remove this {kind.toLowerCase()}, its president and assistant logins, lists, and collection history. This cannot be undone.

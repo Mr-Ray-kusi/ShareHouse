@@ -9,6 +9,7 @@ import {
   SheetUpload,
   SystemEvent,
   Invite,
+  HallAllocation,
   ListException,
   CampaignPayment,
 } from '../models/index.js';
@@ -162,6 +163,36 @@ export const getTenant = asyncHandler(async (req, res) => {
   });
 });
 
+export const listSrcAccounts = asyncHandler(async (_req, res) => {
+  const srcAccounts = await Tenant.find({ subscriptionPlan: 'src', isActive: true }).sort({ schoolName: 1, name: 1 });
+  res.json({
+    srcAccounts: srcAccounts.map((tenant) => ({
+      tenantId: tenant.tenantId,
+      name: tenant.name,
+      schoolName: tenant.schoolName,
+    })),
+  });
+});
+
+export const setTenantSrcLink = asyncHandler(async (req, res) => {
+  const tenant = await Tenant.findOne({ tenantId: req.params.tenantId });
+  if (!tenant) return res.status(404).json({ message: 'Tenant not found.' });
+  if (tenant.subscriptionPlan === 'src') {
+    return res.status(400).json({ message: 'An SRC account cannot be linked as a hall.' });
+  }
+
+  const srcTenantId = String(req.body?.srcTenantId || '').trim();
+  if (srcTenantId) {
+    const src = await Tenant.findOne({ tenantId: srcTenantId });
+    if (!src || src.subscriptionPlan !== 'src' || !src.isActive) {
+      return res.status(400).json({ message: 'Select an active SRC account.' });
+    }
+  }
+  tenant.srcTenantId = srcTenantId || null;
+  await tenant.save();
+  res.json({ tenant, message: srcTenantId ? 'Hall linked to the selected SRC.' : 'SRC link removed.' });
+});
+
 export const setTenantActive = asyncHandler(async (req, res) => {
   const { isActive } = req.body || {};
   const tenant = await Tenant.findOne({ tenantId: req.params.tenantId });
@@ -286,6 +317,7 @@ export const deleteTenant = asyncHandler(async (req, res) => {
   await CampaignPayment.deleteMany({ tenantId });
   await SheetUpload.deleteMany({ tenantId });
   await Invite.deleteMany({ tenantId });
+  await HallAllocation.deleteMany({ tenantId });
   await Distribution.deleteMany({ tenantId });
   await SystemEvent.deleteMany({ tenantId });
   await User.deleteMany({ tenantId });

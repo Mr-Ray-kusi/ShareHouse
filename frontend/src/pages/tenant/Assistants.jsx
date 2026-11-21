@@ -10,8 +10,11 @@ import AssistantAssignmentFields, { assignmentSummary } from '../../components/A
 export default function Assistants() {
   const { tenant, supportMode } = useAuth();
   const [invites, setInvites] = useState([]);
+  const [halls, setHalls] = useState([]);
   const [joinUrl, setJoinUrl] = useState('');
   const [joinPath, setJoinPath] = useState('');
+  const [hallName, setHallName] = useState('');
+  const [hallId, setHallId] = useState('');
   const [label, setLabel] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -24,22 +27,29 @@ export default function Assistants() {
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState('asc');
   const [copiedId, setCopiedId] = useState('');
+  const [oneTimePasswords, setOneTimePasswords] = useState({});
   const [assignColumns, setAssignColumns] = useState([]);
   const [assignColumn, setAssignColumn] = useState('');
   const [assignValues, setAssignValues] = useState([]);
   const [editId, setEditId] = useState('');
-  const [editColumn, setEditColumn] = useState('');
-  const [editValues, setEditValues] = useState([]);
+  const [editHallId, setEditHallId] = useState('');
 
   async function load() {
-    const [{ data }, options] = await Promise.all([
+    const [{ data }, options, hallData] = await Promise.all([
       api.get('/api/invites'),
       api.get('/api/invites/assignment-options').catch(() => ({ data: { columns: [] } })),
+      api.get('/api/invites/halls'),
     ]);
     setInvites(data.invites || []);
     setJoinUrl(data.joinUrl || '');
     setJoinPath(data.joinPath || '');
     setAssignColumns(options.data?.columns || []);
+    setHalls(hallData.data?.halls || []);
+    setHallId((current) => (
+      hallData.data?.halls?.some((hall) => hall._id === current)
+        ? current
+        : hallData.data?.halls?.[0]?._id || ''
+    ));
   }
 
   useEffect(() => {
@@ -86,21 +96,21 @@ export default function Assistants() {
         setBusy(false);
         return;
       }
-      if (assignColumn && !assignValues.length) {
-        setError(`Pick at least one ${assignColumn} value, or leave this assistant on the whole list.`);
-        setBusy(false);
+      if (!hallId) {
+        setError('Create or select a hall allocation first.');
         return;
       }
-      await api.post('/api/invites', {
+      const { data } = await api.post('/api/invites', {
         label: label.trim(),
         password: password.trim() || undefined,
-        assignmentColumn: assignColumn,
-        assignmentValues: assignColumn ? assignValues : [],
+        hallId,
       });
       setLabel('');
       setPassword('');
-      setAssignColumn('');
-      setAssignValues([]);
+      setOneTimePasswords((current) => ({
+        ...current,
+        [data.invite._id]: data.invite.password,
+      }));
       await load();
     } catch (err) {
       setError(err.response?.data?.message || 'Could not create invite.');
@@ -113,14 +123,58 @@ export default function Assistants() {
     setBusy(true);
     setError('');
     try {
-      await api.post(`/api/invites/${id}/password`, {
+      const { data } = await api.post(`/api/invites/${id}/password`, {
         password: resetPassword.trim() || undefined,
       });
       setResetId('');
       setResetPassword('');
+      setOneTimePasswords((current) => ({
+        ...current,
+        [id]: data.invite.password,
+      }));
       await load();
     } catch (err) {
       setError(err.response?.data?.message || 'Could not set password.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createHall(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      if (!hallName.trim() || !assignColumn || assignValues.length !== 1) {
+        setError('Enter a hall name and choose exactly one hall value from the student list.');
+        return;
+      }
+      const { data } = await api.post('/api/invites/halls', {
+        name: hallName.trim(),
+        assignmentColumn: assignColumn,
+        assignmentValues: assignValues,
+      });
+      setHallName('');
+      setAssignColumn('');
+      setAssignValues([]);
+      setHallId(data.hall._id);
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not create hall allocation.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteHall(hall) {
+    if (!window.confirm(`Remove the ${hall.name} allocation?`)) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.delete(`/api/invites/halls/${hall._id}`);
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not remove that hall allocation.');
     } finally {
       setBusy(false);
     }
@@ -130,14 +184,13 @@ export default function Assistants() {
     setBusy(true);
     setError('');
     try {
-      if (editColumn && !editValues.length) {
-        setError(`Pick at least one ${editColumn} value, or leave this assistant on the whole list.`);
+      if (!editHallId) {
+        setError('Select a hall allocation for this assistant.');
         setBusy(false);
         return;
       }
       await api.patch(`/api/invites/${id}/assignment`, {
-        assignmentColumn: editColumn,
-        assignmentValues: editColumn ? editValues : [],
+        hallId: editHallId,
       });
       setEditId('');
       await load();
@@ -176,6 +229,20 @@ export default function Assistants() {
     [verified.results, sortKey, sortDir]
   );
   const fileBase = `${tenant?.tenantId || 'hall'}-${assistantTitle}`.replace(/\s+/g, '-');
+  const inviteGroups = [
+    ...halls.map((hall) => ({
+      id: hall._id,
+      name: hall.name,
+      assistants: hall.assistants,
+      invites: invites.filter((invite) => invite.hallId === hall._id),
+    })),
+    {
+      id: 'unallocated',
+      name: 'Unallocated assistants',
+      assistants: null,
+      invites: invites.filter((invite) => !halls.some((hall) => hall._id === invite.hallId)),
+    },
+  ].filter((group) => group.invites.length);
 
   async function copyPassword(id, value) {
     const text = String(value || '').trim();
@@ -207,8 +274,8 @@ export default function Assistants() {
     <div>
       <HallHero
         eyebrow={`${tenant?.schoolName || ''} · /${tenant?.tenantId || ''}`}
-        title="Assistants"
-        subtitle="One hall link for assistants. Give each person a password and, if you want, only their section of the list — Level 100s, a hall, or another Excel column."
+        title="Hall allocations"
+        subtitle="Create a hall allocation from the student list, then add at least two assistants with separate passwords to each hall."
       />
 
       {(joinUrl || joinPath) && (
@@ -220,9 +287,69 @@ export default function Assistants() {
       )}
 
       {!supportMode && (
-        <form onSubmit={create} className="card p-5 mt-6 space-y-3">
-          <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-            <input className="input" placeholder="Name (e.g. Table 2 — Kojo)" value={label} onChange={(e) => setLabel(e.target.value)} required />
+        <>
+          <section className="card p-5 mt-6 space-y-4">
+            <div>
+              <h2 className="font-display text-2xl">Create hall allocation</h2>
+              <p className="text-sm text-ink/60 mt-1">Select the hall column and value from the uploaded list.</p>
+            </div>
+            {halls.length ? (
+              <div className="grid gap-2 md:grid-cols-2">
+                {halls.map((hall) => (
+                  <div key={hall._id} className="rounded-xl border border-forest-100 bg-mist/50 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold">{hall.name}</p>
+                        <p className="text-xs text-ink/60">{hall.assignmentColumn}: {hall.assignmentValue}</p>
+                        <p className={`mt-1 text-xs ${hall.assistants.active >= 2 ? 'text-forest-700' : 'text-amber-800'}`}>
+                          {hall.assistants.active} active assistant{hall.assistants.active === 1 ? '' : 's'} · minimum 2
+                        </p>
+                      </div>
+                      {!hall.assistants.total ? (
+                        <button type="button" className="btn-ghost text-xs" disabled={busy} onClick={() => deleteHall(hall)}>
+                          <Trash2 size={14} /> Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <form onSubmit={createHall} className="space-y-3">
+              <input
+                className="input"
+                placeholder="Hall name (e.g. Hall One)"
+                value={hallName}
+                onChange={(e) => setHallName(e.target.value)}
+                maxLength={80}
+                required
+              />
+              <AssistantAssignmentFields
+                columns={assignColumns}
+                column={assignColumn}
+                values={assignValues}
+                onColumn={setAssignColumn}
+                onValues={(values) => setAssignValues(values.slice(-1))}
+                disabled={busy}
+              />
+              <button className="btn-primary" disabled={busy || !assignColumns.length}>
+                {busy ? 'Saving…' : 'Create hall allocation'}
+              </button>
+            </form>
+          </section>
+
+          <form onSubmit={create} className="card p-5 mt-4 space-y-3">
+            <h2 className="font-display text-2xl">Add assistant to a hall</h2>
+            <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+              <select className="input" value={hallId} onChange={(e) => setHallId(e.target.value)} required>
+                <option value="">Select a hall</option>
+                {halls.map((hall) => (
+                  <option key={hall._id} value={hall._id}>
+                    {hall.name} · {hall.assistants.active} active
+                  </option>
+                ))}
+              </select>
+              <input className="input" placeholder="Assistant name" value={label} onChange={(e) => setLabel(e.target.value)} required />
             <input
               className="input"
               type="text"
@@ -231,24 +358,32 @@ export default function Assistants() {
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="off"
             />
-            <button className="btn-primary" disabled={busy}>{busy ? 'Creating…' : 'Add assistant'}</button>
-          </div>
-          <AssistantAssignmentFields
-            columns={assignColumns}
-            column={assignColumn}
-            values={assignValues}
-            onColumn={setAssignColumn}
-            onValues={setAssignValues}
-            disabled={busy}
-          />
-        </form>
+              <button className="btn-primary" disabled={busy || !halls.length}>
+                {busy ? 'Creating…' : 'Add assistant'}
+              </button>
+            </div>
+            <p className="text-xs text-ink/60">Student verification stays disabled for a hall until it has at least two active assistants.</p>
+          </form>
+        </>
       )}
       {error && <p className="text-sm text-red-700 mt-3">{error}</p>}
 
-      <div className="mt-6 space-y-3">
-        {invites.map((inv) => {
+      <div className="mt-6 space-y-6">
+        {inviteGroups.map((group) => (
+          <section key={group.id} className="space-y-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="font-display text-xl">{group.name}</h2>
+              {group.assistants ? (
+                <p className={`text-xs ${group.assistants.active >= 2 ? 'text-forest-700' : 'text-amber-800'}`}>
+                  {group.assistants.active} active assistant{group.assistants.active === 1 ? '' : 's'} · minimum 2
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-3">
+        {group.invites.map((inv) => {
           const open = openId === inv._id;
-          const secret = inv.password || inv.passwordPlain || '';
+          const hall = halls.find((item) => item._id === inv.hallId);
+          const secret = oneTimePasswords[inv._id] || inv.password || inv.passwordPlain || '';
           return (
             <div key={inv._id} className={`card overflow-hidden ${open ? 'ring-2 ring-forest-600' : ''}`}>
               <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center">
@@ -263,7 +398,8 @@ export default function Assistants() {
                   </p>
                   <p className="text-xs text-ink/60">
                     {inv.isActive ? 'Active' : 'Revoked'}
-                    {` · ${assignmentSummary(inv)}`}
+                    {` · ${hall?.name || 'Unallocated'}`}
+                    {hall ? ` · ${assignmentSummary(inv)}` : ''}
                     {inv.assistantName ? '' : ' · not joined yet'}
                     {open ? ' · showing verified list' : ' · tap to view verified students'}
                   </p>
@@ -300,11 +436,10 @@ export default function Assistants() {
                             return;
                           }
                           setEditId(inv._id);
-                          setEditColumn(inv.assignmentColumn || '');
-                          setEditValues(Array.isArray(inv.assignmentValues) ? inv.assignmentValues : []);
+                          setEditHallId(inv.hallId || '');
                         }}
                       >
-                        {editId === inv._id ? 'Cancel section' : 'Change section'}
+                        {editId === inv._id ? 'Cancel allocation' : 'Change hall'}
                       </button>
                       {inv.isActive ? (
                         <button type="button" className="btn-ghost text-xs text-red-700 shrink-0" onClick={() => revoke(inv._id)}>Revoke</button>
@@ -327,15 +462,21 @@ export default function Assistants() {
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <AssistantAssignmentFields
-                    columns={assignColumns}
-                    column={editColumn}
-                    values={editValues}
-                    onColumn={setEditColumn}
-                    onValues={setEditValues}
+                  <label className="label" htmlFor={`assistant-hall-${inv._id}`}>Hall allocation</label>
+                  <select
+                    id={`assistant-hall-${inv._id}`}
+                    className="input"
+                    value={editHallId}
+                    onChange={(e) => setEditHallId(e.target.value)}
                     disabled={busy}
-                  />
-                  <button className="btn-primary" disabled={busy}>Save section</button>
+                    required
+                  >
+                    <option value="">Select a hall</option>
+                    {halls.map((hallOption) => (
+                      <option key={hallOption._id} value={hallOption._id}>{hallOption.name}</option>
+                    ))}
+                  </select>
+                  <button className="btn-primary" disabled={busy || !halls.length}>Save hall allocation</button>
                 </form>
               )}
               {resetId === inv._id && (
@@ -390,6 +531,9 @@ export default function Assistants() {
             </div>
           );
         })}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   );

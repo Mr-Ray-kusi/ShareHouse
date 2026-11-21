@@ -14,7 +14,7 @@ import { telemetryMiddleware } from './services/telemetry.js';
 import { ensureSuperAdmin } from './scripts/seedSuperAdmin.js';
 import { getSb } from './db/supabase.js';
 import { verifyAccessToken } from './utils/tokens.js';
-import { Tenant } from './models/index.js';
+import { HallAllocation, Invite, Tenant } from './models/index.js';
 import { listHallsForSrc } from './utils/srcHalls.js';
 
 const app = express();
@@ -45,10 +45,31 @@ io.use((socket, next) => {
   }
 });
 
-io.on('connection', (socket) => {
-  const tenantId = socket.user?.tenantId;
-  if (tenantId) socket.join(`tenant:${tenantId}`);
-  if (socket.user?.role === 'super_admin') socket.join('super');
+io.on('connection', async (socket) => {
+  try {
+    const tenantId = socket.user?.tenantId;
+    if (socket.user?.role === 'assistant' && tenantId) {
+      const invite = await Invite.findOne({
+        tenantId,
+        assistantId: socket.user.sub,
+        isActive: true,
+      });
+      if (invite?.hallId) {
+        const [hall, activeAssistants] = await Promise.all([
+          HallAllocation.findOne({ _id: invite.hallId, tenantId }),
+          Invite.countDocuments({ tenantId, hallId: invite.hallId, isActive: true }),
+        ]);
+        if (hall && activeAssistants >= 2) socket.join(`tenant:${tenantId}`);
+      }
+    } else if (tenantId) {
+      socket.join(`tenant:${tenantId}`);
+    }
+    if (socket.user?.role === 'super_admin') socket.join('super');
+  } catch (err) {
+    console.error('Socket room authorization failed', err);
+    socket.disconnect(true);
+    return;
+  }
   socket.on('src:watch', async (hallTenantId) => {
     try {
       if (socket.user?.role !== 'tenant_admin' || !socket.user?.tenantId) return;

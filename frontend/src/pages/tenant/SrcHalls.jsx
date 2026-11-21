@@ -30,7 +30,7 @@ export default function SrcHalls() {
       <HallHero
         eyebrow={`${tenant?.schoolName || ''} · SRC`}
         title="Campus halls"
-        subtitle="Monitor sharing campaigns. Hall presidents approve students. SRC cannot approve walk-ins."
+        subtitle="Monitor sharing campaigns and review assistant requests for students who are missing from a hall list."
       />
       <div className="card p-5">
         <p className="text-xs uppercase tracking-widest text-forest-700">SRC ID for hall registration</p>
@@ -63,7 +63,7 @@ export default function SrcHalls() {
         })}
       </div>
       {!halls.length && !error && (
-        <p className="mt-6 text-sm text-ink/55">No halls under this SRC yet. Halls register with the same school name, or with this SRC ID.</p>
+        <p className="mt-6 text-sm text-ink/55">No halls are linked to this SRC yet. Ask the ShareHouse system administrator to verify and link the hall accounts.</p>
       )}
     </div>
   );

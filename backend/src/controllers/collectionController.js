@@ -53,7 +53,7 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
   const q = String(req.query.q || '').trim();
   const dist = await resolveWorkingDistribution(req);
   if (!dist) {
-    return res.status(404).json({ message: 'No active distribution. Ask the hall president to start one.' });
+    return res.status(404).json({ message: 'No active distribution. Ask the SRC administrator to start one.' });
   }
 
   const filter = {
@@ -128,7 +128,7 @@ export const searchBeneficiaries = asyncHandler(async (req, res) => {
 export const offlinePack = asyncHandler(async (req, res) => {
   const dist = await getActiveDistribution(req.tenantId);
   if (!dist) {
-    return res.status(404).json({ message: 'No active distribution. Ask the hall president to start one.' });
+    return res.status(404).json({ message: 'No active distribution. Ask the SRC administrator to start one.' });
   }
 
   const assignment = await getAssistantAssignment(req);

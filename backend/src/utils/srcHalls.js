@@ -1,19 +1,15 @@
 import { Tenant } from '../models/Tenant.js';
-import { foldSearch } from './search.js';
 
 export function isSrcTenant(tenant) {
   return tenant?.subscriptionPlan === 'src';
 }
 
 export async function listHallsForSrc(srcTenant) {
-  const school = foldSearch(srcTenant?.schoolName);
-  const all = await Tenant.find().sort({ name: 1 });
-  return all.filter((hall) => {
-    if (!hall || hall.tenantId === srcTenant.tenantId) return false;
-    if (hall.subscriptionPlan === 'src') return false;
-    if (hall.srcTenantId) return hall.srcTenantId === srcTenant.tenantId;
-    return Boolean(school && foldSearch(hall.schoolName) === school);
-  });
+  if (!isSrcTenant(srcTenant)) return [];
+  return Tenant.find({
+    srcTenantId: srcTenant.tenantId,
+    subscriptionPlan: { $ne: 'src' },
+  }).sort({ name: 1 });
 }
 
 export async function assertHallUnderSrc(srcTenant, hallTenantId) {

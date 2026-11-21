@@ -1,4 +1,4 @@
-import { Beneficiary, Invite, Distribution } from '../models/index.js';
+import { Beneficiary, Invite, Distribution, HallAllocation } from '../models/index.js';
 import { foldSearch } from '../utils/search.js';
 import { classifySheetHeaders } from './listService.js';
 import { getActiveDistribution } from './activeDistribution.js';
@@ -125,7 +125,9 @@ export async function getAssistantAssignment(req) {
     req._assistantAssignment = null;
     return null;
   }
-  let invite = req.user.inviteId ? await Invite.findById(req.user.inviteId) : null;
+  let invite = req.user.inviteId
+    ? await Invite.findOne({ _id: req.user.inviteId, tenantId: req.tenantId, isActive: true })
+    : null;
   if (!invite) {
     invite = await Invite.findOne({
       tenantId: req.tenantId,
@@ -133,8 +135,64 @@ export async function getAssistantAssignment(req) {
       isActive: true,
     });
   }
-  req._assistantAssignment = presentAssignment(invite);
+  const hall = invite?.hallId
+    ? await HallAllocation.findOne({ _id: invite.hallId, tenantId: req.tenantId })
+    : null;
+  req._assistantAssignment = hall
+    ? { column: hall.assignmentColumn, values: [hall.assignmentValue] }
+    : null;
   return req._assistantAssignment;
+}
+
+export async function requireStaffedHall(req, res, next) {
+  if (req.user?.role !== 'assistant') return next();
+  try {
+    let invite = req.user.inviteId
+      ? await Invite.findOne({ _id: req.user.inviteId, tenantId: req.tenantId, isActive: true })
+      : null;
+    if (!invite) {
+      invite = await Invite.findOne({
+        tenantId: req.tenantId,
+        assistantId: req.user._id,
+        isActive: true,
+      });
+    }
+    if (!invite?.hallId) {
+      return res.status(403).json({ message: 'Your account is not assigned to a hall. Contact the SRC administrator.' });
+    }
+    const hall = await HallAllocation.findOne({ _id: invite.hallId, tenantId: req.tenantId });
+    if (!hall) {
+      return res.status(403).json({ message: 'Your hall allocation is no longer available. Contact the SRC administrator.' });
+    }
+    const activeAssistants = await Invite.countDocuments({
+      tenantId: req.tenantId,
+      hallId: hall._id,
+      isActive: true,
+    });
+    if (activeAssistants < 2) {
+      return res.status(403).json({ message: `${hall.name} needs at least two active assistants before student verification is enabled.` });
+    }
+    req.assistantHall = hall;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function disconnectUnstaffedHallAssistants(io, tenantId, hallId) {
+  if (!io || !tenantId || !hallId) return;
+  const activeAssistants = await Invite.countDocuments({
+    tenantId,
+    hallId,
+    isActive: true,
+  });
+  if (activeAssistants >= 2) return;
+  const sockets = await io.in(`tenant:${tenantId}`).fetchSockets();
+  await Promise.all(
+    sockets
+      .filter((socket) => socket.user?.role === 'assistant')
+      .map((socket) => socket.disconnect(true))
+  );
 }
 
 export function assignmentColumnCandidates(headers = []) {

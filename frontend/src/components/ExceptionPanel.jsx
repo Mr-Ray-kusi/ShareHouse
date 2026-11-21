@@ -38,6 +38,7 @@ function PhotoThumb({ id, hasPhoto, photoBase = '/api/exceptions' }) {
 export default function ExceptionPanel({
   items = [],
   canReview = false,
+  allowMarkReceived = true,
   busyId = '',
   photoBase = '/api/exceptions',
   compact = false,
@@ -128,21 +129,23 @@ export default function ExceptionPanel({
           </div>
           {row.status === 'pending' && canReview ? (
             <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn-primary text-xs"
-                disabled={busyId === row.id}
-                onClick={() => onApprove?.(row, true)}
-              >
-                Approve and mark received
-              </button>
+              {allowMarkReceived ? (
+                <button
+                  type="button"
+                  className="btn-primary text-xs"
+                  disabled={busyId === row.id}
+                  onClick={() => onApprove?.(row, true)}
+                >
+                  Approve and mark received
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="btn-ghost text-xs"
                 disabled={busyId === row.id}
                 onClick={() => onApprove?.(row, false)}
               >
-                Approve only
+                {allowMarkReceived ? 'Approve only' : 'Approve student'}
               </button>
               <button
                 type="button"
@@ -171,7 +174,7 @@ export default function ExceptionPanel({
   );
 }
 
-export async function reviewWalkIn(id, action, extras = {}) {
-  const { data } = await api.post(`/api/exceptions/${id}/review`, { action, ...extras });
+export async function reviewWalkIn(id, action, extras = {}, endpoint) {
+  const { data } = await api.post(endpoint || `/api/exceptions/${id}/review`, { action, ...extras });
   return data;
 }

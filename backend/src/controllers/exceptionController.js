@@ -111,7 +111,7 @@ export const listExceptions = asyncHandler(async (req, res) => {
 export const createException = asyncHandler(async (req, res) => {
   const dist = await workingDistribution(req);
   if (!dist || dist.status !== 'active') {
-    return res.status(400).json({ message: 'No active distribution. Ask the hall president to start one.' });
+    return res.status(400).json({ message: 'No active distribution. Ask the SRC administrator to start one.' });
   }
 
   const headers = await listHeaders(dist);
@@ -184,18 +184,33 @@ export const createException = asyncHandler(async (req, res) => {
   track({ pillar: 'funnel', name: 'exception_create', tenantId: req.tenantId || '', role: req.user?.role || '' });
 
   res.status(201).json({
-    message: 'Walk-in request sent. Wait for the hall admin to approve before giving the item.',
+    message: 'Student request sent. Wait for the linked SRC administrator to approve before verification.',
     exception: payload,
   });
 });
 
 export const reviewException = asyncHandler(async (req, res) => {
   if (req.user.role !== 'tenant_admin') {
-    return res.status(403).json({ message: 'Only the hall president can approve or reject walk-ins.' });
+    return res.status(403).json({ message: 'Only a campus administrator can approve or reject walk-ins.' });
   }
-  if (req.tenant?.subscriptionPlan === 'src') {
+  const isLinkedSrcReviewer = Boolean(
+    req.srcReview
+    && req.srcTenantId
+    && String(req.user.tenantId) === String(req.srcTenantId)
+    && String(req.tenant?.srcTenantId) === String(req.srcTenantId)
+  );
+  const isLocalSrcReviewer = Boolean(
+    !req.srcReview
+    && req.tenant?.subscriptionPlan === 'src'
+    && String(req.user.tenantId) === String(req.tenantId)
+  );
+  const isSrcReviewer = isLinkedSrcReviewer || isLocalSrcReviewer;
+  if (req.srcReview && !isLinkedSrcReviewer) {
+    return res.status(403).json({ message: 'This SRC is not authorized to review walk-ins for this hall.' });
+  }
+  if (!isSrcReviewer) {
     return res.status(403).json({
-      message: 'SRC can monitor halls but cannot approve a student. The hall president must review walk-ins.',
+      message: 'Only the linked SRC administrator can approve or reject walk-in students.',
     });
   }
 
@@ -254,7 +269,7 @@ export const reviewException = asyncHandler(async (req, res) => {
     await refreshDistributionCounts(dist);
   }
 
-  const markReceived = Boolean(req.body?.markReceived) && linkedExisting;
+  const markReceived = !isSrcReviewer && Boolean(req.body?.markReceived) && linkedExisting;
   let markPayload = null;
   if (markReceived) {
     try {

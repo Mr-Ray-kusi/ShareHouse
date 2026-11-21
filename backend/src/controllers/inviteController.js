@@ -1,10 +1,15 @@
 import bcrypt from 'bcryptjs';
-import { Invite, User, Tenant, Collection, Distribution, Beneficiary } from '../models/index.js';
+import { Invite, User, Tenant, Collection, Distribution, Beneficiary, HallAllocation } from '../models/index.js';
 import { generateInviteCode, generateInvitePassword, isFieldQrCode } from '../utils/codes.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { env } from '../config/env.js';
 import { getActiveDistribution } from '../services/activeDistribution.js';
-import { loadAssignmentOptions, parseAssignment, throwIfAssignmentSchema } from '../services/assistantAssignment.js';
+import {
+  disconnectUnstaffedHallAssistants,
+  loadAssignmentOptions,
+  parseAssignment,
+  throwIfAssignmentSchema,
+} from '../services/assistantAssignment.js';
 
 export async function ensureJoinCode(tenant) {
   if (tenant.joinCode) return tenant.joinCode;
@@ -79,51 +84,119 @@ export const assignmentOptions = asyncHandler(async (req, res) => {
   res.json(options);
 });
 
+export const listHallAllocations = asyncHandler(async (req, res) => {
+  const [halls, invites] = await Promise.all([
+    HallAllocation.find({ tenantId: req.tenantId }).sort({ name: 1 }),
+    Invite.find({ tenantId: req.tenantId }).select('hallId isActive'),
+  ]);
+  const counts = new Map();
+  for (const invite of invites) {
+    const hallId = String(invite.hallId || '');
+    if (!hallId) continue;
+    const count = counts.get(hallId) || { total: 0, active: 0 };
+    count.total += 1;
+    if (invite.isActive) count.active += 1;
+    counts.set(hallId, count);
+  }
+  res.json({
+    halls: halls.map((hall) => ({
+      ...hall.toObject(),
+      assistants: counts.get(String(hall._id)) || { total: 0, active: 0 },
+    })),
+  });
+});
+
+export const createHallAllocation = asyncHandler(async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  if (!name || name.length > 80) {
+    return res.status(400).json({ message: 'Hall name is required and must be 80 characters or fewer.' });
+  }
+  const assignment = parseAssignment(req.body);
+  if (!assignment.assignmentColumn || assignment.assignmentValues.length !== 1) {
+    return res.status(400).json({ message: 'Choose one hall value from the uploaded student list.' });
+  }
+  const options = await loadAssignmentOptions(req.tenantId);
+  const column = options.columns.find((item) => item.header === assignment.assignmentColumn);
+  if (!column || !column.values.some((value) => value === assignment.assignmentValues[0])) {
+    return res.status(400).json({ message: 'Choose a hall column and value present in the current student list.' });
+  }
+  const existingHall = await HallAllocation.findOne({
+    tenantId: req.tenantId,
+    assignmentColumn: assignment.assignmentColumn,
+    assignmentValue: assignment.assignmentValues[0],
+  });
+  if (existingHall) {
+    return res.status(409).json({ message: `That student-list value is already allocated to ${existingHall.name}.` });
+  }
+  const hall = await HallAllocation.create({
+    tenantId: req.tenantId,
+    name,
+    assignmentColumn: assignment.assignmentColumn,
+    assignmentValue: assignment.assignmentValues[0],
+    createdBy: req.user._id,
+  });
+  res.status(201).json({ hall: { ...hall.toObject(), assistants: { total: 0, active: 0 } } });
+});
+
+export const deleteHallAllocation = asyncHandler(async (req, res) => {
+  const hall = await HallAllocation.findOne({ _id: req.params.hallId, tenantId: req.tenantId });
+  if (!hall) return res.status(404).json({ message: 'Hall allocation not found.' });
+  const assistants = await Invite.countDocuments({ tenantId: req.tenantId, hallId: hall._id });
+  if (assistants) {
+    return res.status(409).json({ message: "Reassign or delete this hall's assistants before removing the allocation." });
+  }
+  await HallAllocation.deleteMany({ _id: hall._id, tenantId: req.tenantId });
+  res.json({ message: 'Hall allocation removed.' });
+});
+
 export const setInviteAssignment = asyncHandler(async (req, res) => {
   const invite = await Invite.findOne({ _id: req.params.id, tenantId: req.tenantId });
   if (!invite) return res.status(404).json({ message: 'Invite not found.' });
-  const assignment = parseAssignment(req.body);
-  invite.assignmentColumn = assignment.assignmentColumn;
-  invite.assignmentValues = assignment.assignmentValues;
+  const hall = await HallAllocation.findOne({ _id: req.body?.hallId, tenantId: req.tenantId });
+  if (!hall) return res.status(400).json({ message: 'Select a hall allocation for this assistant.' });
+  const previousHallId = invite.hallId;
+  invite.hallId = hall._id;
+  invite.assignmentColumn = hall.assignmentColumn;
+  invite.assignmentValues = [hall.assignmentValue];
   try {
     await invite.save();
   } catch (err) {
     throwIfAssignmentSchema(err);
     throw err;
   }
+  if (previousHallId && String(previousHallId) !== String(hall._id)) {
+    await disconnectUnstaffedHallAssistants(req.app.get('io'), req.tenantId, previousHallId);
+  }
   res.json({
-    message: assignment.assignmentColumn
-      ? `This assistant now covers ${assignment.assignmentColumn}: ${assignment.assignmentValues.join(', ')}.`
-      : 'This assistant can now verify the whole list.',
+    message: `This assistant is allocated to ${hall.name}.`,
     invite,
   });
 });
 
 export const createInvite = asyncHandler(async (req, res) => {
-  const { label, distributionId, password: requestedPassword } = req.body || {};
+  const { label, password: requestedPassword } = req.body || {};
   const name = String(label || '').trim();
   if (!name) {
     return res.status(400).json({ message: 'Assistant name is required.' });
   }
+  const hall = await HallAllocation.findOne({ _id: req.body?.hallId, tenantId: req.tenantId });
+  if (!hall) return res.status(400).json({ message: 'Choose the hall to allocate this assistant to.' });
   const joinCode = await ensureJoinCode(req.tenant);
   const password = await uniquePassword(req.tenantId, requestedPassword);
   const passwordHash = await bcrypt.hash(password, 12);
 
-  const assignment = parseAssignment(req.body);
   const payload = {
     tenantId: req.tenantId,
     code: joinCode,
     label: name,
     passwordHash,
     passwordPlain: password,
-    distributionId: distributionId || null,
+    hallId: hall._id,
+    assignmentColumn: hall.assignmentColumn,
+    assignmentValues: [hall.assignmentValue],
     createdBy: req.user._id,
     isActive: true,
   };
-  if (assignment.assignmentColumn) {
-    payload.assignmentColumn = assignment.assignmentColumn;
-    payload.assignmentValues = assignment.assignmentValues;
-  }
   let invite;
   try {
     invite = await Invite.create(payload);
@@ -138,7 +211,7 @@ export const createInvite = asyncHandler(async (req, res) => {
       ...joinPayload(joinCode),
       password,
     },
-    warning: 'Each assistant has a unique password. It is shown beside their name.',
+    warning: 'Each hall needs at least two active assistants before anyone assigned to it can verify a student.',
   });
 });
 
@@ -236,6 +309,7 @@ export const revokeInvite = asyncHandler(async (req, res) => {
   if (invite.assistantId) {
     await User.findByIdAndUpdate(invite.assistantId, { isActive: false, refreshTokens: [] });
   }
+  await disconnectUnstaffedHallAssistants(req.app.get('io'), req.tenantId, invite.hallId);
 
   res.json({ message: 'Assistant access revoked.', invite });
 });
@@ -268,6 +342,7 @@ export const deleteInvite = asyncHandler(async (req, res) => {
     await User.findByIdAndUpdate(invite.assistantId, { isActive: false, refreshTokens: [] });
   }
   await Invite.deleteMany({ _id: invite._id, tenantId: req.tenantId });
+  await disconnectUnstaffedHallAssistants(req.app.get('io'), req.tenantId, invite.hallId);
   res.json({ message: 'Assistant deleted.' });
 });
 

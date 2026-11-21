@@ -165,7 +165,7 @@ export const login = asyncHandler(async (req, res) => {
   }
 
   if (user.role === 'hall_admin' || user.role === 'porter') {
-    return res.status(403).json({ message: 'This desk is no longer available. Sign in as a hall president, assistant, or operator.' });
+    return res.status(403).json({ message: 'This desk is no longer available. Sign in as an SRC administrator, assistant, or operator.' });
   }
 
   if (user.role === 'tenant_admin') {

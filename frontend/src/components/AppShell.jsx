@@ -57,7 +57,7 @@ export default function AppShell() {
   const links = [
     { to: '/app', label: 'Live desk', icon: LayoutDashboard },
     { to: '/app/distributions', label: 'Distributions', icon: Package },
-    { to: '/app/assistants', label: 'Assistants', icon: Users },
+    { to: '/app/assistants', label: 'Hall allocation', icon: Users },
     ...(isSrc ? [{ to: '/app/halls', label: 'Campus halls', icon: Building2 }] : []),
   ];
 

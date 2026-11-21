@@ -20,10 +20,11 @@ Every hall/SRC is a tenant (`tenantId` slug, e.g. `atlantic-hall-knust`). Users,
 | Role | Can |
 | --- | --- |
 | Super admin | All accounts, campaign revenue, activate/deactivate, Support Mode (view-only) |
-| Tenant admin | Own SRC account: distributions, Excel upload, assistant invites, live desk |
-| Assistant | Join link only: search + mark received. No menu, reports, or settings |
+| Tenant admin | Own SRC account: distributions, Excel upload, hall allocations, assistant credentials, live desk |
+| Assistant | Assigned hall only: search + mark received; can request an unlisted student for SRC review |
 
 Super admins **cannot** create distributions or mark beneficiaries, including in Support Mode.
+Hall accounts must be explicitly linked to an SRC by a system admin; matching school names alone never grant cross-account access. Assistant verification is enabled only when the assigned hall has at least two active assistant accounts. Walk-in requests submitted by assistants must be approved or rejected by the linked SRC administrator before the student can be verified.
 
 Each account supports up to two active device sessions. Signing in on another device replaces the oldest session, which is denied on its next authenticated request. The API also retains its separate sign-in attempt rate limit.
 
@@ -35,8 +36,9 @@ Each account supports up to two active device sessions. Signing in on another de
 4. **CampaignPayment** — verified Paystack charge, reference, student count, and amount
 5. **Beneficiary** — list row for a distribution (index, name, level, phone)
 6. **Collection** — unique `(distributionId, beneficiaryId)` mark, with assistant + timestamp
-7. **Invite** — `/join/ATL-89XK2` codes with hashed passwords; revoke disables the assistant
-8. **Supporting records** — uploads, walk-in exceptions, collection voids, and system events
+7. **HallAllocation** — maps a campus hall to one hall value in the uploaded student list
+8. **Invite** — `/join/ATL-89XK2` credentials scoped to a hall; revoke disables the assistant
+9. **Supporting records** — uploads, walk-in exceptions, collection voids, and system events
 
 ## Campaign pricing
 
@@ -47,7 +49,7 @@ Changing the number of people on an active campaign pauses it. A new payment mat
 ## Local setup
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. In the dashboard SQL Editor, run `backend/supabase/schema.sql`. On an existing project, run `backend/supabase/campaign-billing.sql` and `backend/supabase/share-day.sql`.
+2. In the dashboard SQL Editor, run `backend/supabase/schema.sql`. On an existing project, run `backend/supabase/campaign-billing.sql`, `backend/supabase/share-day.sql`, and `backend/supabase/hall-allocation.sql`.
 3. Copy env files and fill in the project URL plus the **service role** key (Settings → API). Never put that key in the frontend.
 
 ```bash
@@ -72,6 +74,8 @@ npm run dev
 
 Set `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` in `backend/.env` (local) and on the API host (production). Those values are never committed. The API creates or updates the single system admin on boot and disables any previous default accounts.
 
+Use the system admin's account detail page to explicitly link verified hall accounts to their campus SRC. After the database migration, SRC administrators can create hall allocations from a hall column/value in the uploaded list and add assistant accounts to each allocation. Keep at least two assistants active per hall to enable verification.
+
 ## Paystack webhook
 
 Point Paystack to:
@@ -86,7 +90,7 @@ Events used: `charge.success`. The signature header `x-paystack-signature` is ve
 
 ## Deploy
 
-- **Database:** Supabase — run `backend/supabase/schema.sql` (or `backend/supabase/campaign-billing.sql` for an existing database), then set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on the API host
+- **Database:** Supabase — run `backend/supabase/schema.sql` (or the required SQL migrations, including `backend/supabase/hall-allocation.sql`, for an existing database), then set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on the API host
 - **API:** Render or Railway — set env vars from `backend/.env.example`, start command `npm start`, health `/api/health`
 - **Web:** Vercel or Netlify — build `npm run build`, output `dist`, set `VITE_API_URL` to the public API origin
 - Frontend `vercel.json` rewrites all routes to `index.html`

@@ -154,6 +154,7 @@ export default function DistributionDetail() {
   async function saveStudent(fields) {
     setBusy(true);
     setError('');
+    const knownIds = new Set(list.map((row) => row.id));
     try {
       const editing = Boolean(editor?.id);
       let data;
@@ -178,6 +179,33 @@ export default function DistributionDetail() {
       }
       setUploadMsg(data.message);
     } catch (err) {
+      if (!editor?.id && err.response?.status >= 500) {
+        try {
+          const rows = await load(fields.studentIndex || fields.fullName);
+          const savedStudent = rows.find((row) => (
+            !knownIds.has(row.id)
+            && (fields.studentIndex
+              ? row.studentIndex?.trim().toUpperCase() === fields.studentIndex.trim().toUpperCase()
+              : row.fullName?.trim().replace(/\s+/g, ' ').toLowerCase()
+                === fields.fullName.trim().replace(/\s+/g, ' ').toLowerCase()
+                && row.level === fields.level
+                && row.phone === fields.phone)
+          ));
+          if (savedStudent) {
+            setEditor(null);
+            setList((current) => (
+              [savedStudent, ...current.filter((row) => row.id !== savedStudent.id)]
+                .sort((a, b) => a.fullName.localeCompare(b.fullName))
+            ));
+            setQ('');
+            setFilters({});
+            setUploadMsg('Student saved successfully.');
+            return;
+          }
+        } catch (_reconcileError) {
+          // Keep the original save error if the follow-up check cannot reach the server.
+        }
+      }
       setError(err.response?.data?.message || 'Could not save that student.');
     } finally {
       setBusy(false);
@@ -282,13 +310,14 @@ export default function DistributionDetail() {
           <h2 className="font-display text-2xl">Walk-ins waiting</h2>
           <p className="text-sm text-ink/60 mt-1">
             {isSrc
-              ? 'SRC can monitor walk-ins. Only the hall president can approve a student.'
-              : 'Approve only if you are sure they should collect.'}
+              ? 'Review assistant requests here. Approved students still require a paid active campaign before verification.'
+              : 'Only the linked SRC administrator can approve or reject a walk-in.'}
           </p>
           <div className="mt-3">
             <ExceptionPanel
               items={pendingWalkIns}
-              canReview={!supportMode && !isSrc}
+              canReview={!supportMode && isSrc}
+              allowMarkReceived={false}
               busyId={exceptionBusy}
               onApprove={async (row, markReceived) => {
                 setExceptionBusy(row.id);
