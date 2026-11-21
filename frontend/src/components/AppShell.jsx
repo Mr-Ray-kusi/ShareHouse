@@ -11,7 +11,7 @@ function BrandMark() {
       </div>
       <div>
         <p className="font-display text-lg leading-none">ShareHouse</p>
-        <p className="text-[11px] uppercase tracking-[0.18em] text-forest-700/70">Halls of Ghana</p>
+        <p className="text-[11px] uppercase tracking-[0.18em] text-forest-700/70">Uni&apos;s In Ghana</p>
       </div>
     </div>
   );

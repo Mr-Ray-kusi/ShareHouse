@@ -11,13 +11,21 @@ export async function authenticate(req, res, next) {
     }
 
     const payload = verifyAccessToken(token);
-    const user = await cacheWrap(
-      `user:${payload.sub}`,
-      90000,
-      () => User.findById(payload.sub)
-    );
+    const user = payload.sid
+      ? await User.findById(payload.sub)
+      : await cacheWrap(
+        `user:${payload.sub}`,
+        90000,
+        () => User.findById(payload.sub)
+      );
     if (!user || !user.isActive) {
       return res.status(401).json({ message: 'Account is inactive or missing.' });
+    }
+    if (
+      payload.sid
+      && !(user.refreshTokens || []).some((session) => session.tokenHash === payload.sid)
+    ) {
+      return res.status(401).json({ message: 'This device session is no longer active. Sign in again.' });
     }
 
     req.user = user;

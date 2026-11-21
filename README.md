@@ -25,6 +25,8 @@ Every hall/SRC is a tenant (`tenantId` slug, e.g. `atlantic-hall-knust`). Users,
 
 Super admins **cannot** create distributions or mark beneficiaries, including in Support Mode.
 
+Each account supports up to two active device sessions. Signing in on another device replaces the oldest session, which is denied on its next authenticated request. The API also retains its separate sign-in attempt rate limit.
+
 ## Core records
 
 1. **Tenant** — SRC profile, account status, school and administrator details

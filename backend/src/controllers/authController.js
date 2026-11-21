@@ -16,6 +16,8 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { track } from '../services/telemetry.js';
 import { namesMatch } from '../utils/search.js';
 
+const MAX_DEVICE_SESSIONS = 2;
+
 function setRefreshCookie(res, token) {
   res.cookie('ws_refresh', token, refreshCookieOptions());
 }
@@ -28,12 +30,6 @@ function tokenExpiry(token) {
   const raw = token?.expiresAt;
   const at = raw instanceof Date ? raw : new Date(raw || 0);
   return Number.isNaN(at.getTime()) ? new Date(0) : at;
-}
-
-function sessionLimitFor(role) {
-  if (role === 'assistant') return 1;
-  if (role === 'tenant_admin') return 2;
-  return Infinity;
 }
 
 function liveRefreshTokens(user) {
@@ -58,28 +54,25 @@ function replacingTokenHash(req, user) {
 }
 
 async function issueSession(res, user, extras = {}, options = {}) {
-  const payload = accessPayload(user, extras);
-  const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken({ sub: String(user._id) });
   const tokenHash = hashToken(refreshToken);
+  const payload = accessPayload(user, { ...extras, sid: tokenHash });
+  const accessToken = signAccessToken(payload);
   const expiresAt = new Date(Date.now() + env.refreshTtlDays * 24 * 60 * 60 * 1000);
   const replacingHash = options.replacingHash || null;
-  const limit = sessionLimitFor(user.role);
 
   user.refreshTokens = liveRefreshTokens(user);
   if (replacingHash) {
     user.refreshTokens = user.refreshTokens.filter((token) => token.tokenHash !== replacingHash);
   }
 
-  if (Number.isFinite(limit) && !options.rotateOnly && user.refreshTokens.length >= limit) {
-    user.refreshTokens = sortRefreshTokens(user.refreshTokens).slice(-(limit - 1));
+  if (!options.rotateOnly && user.refreshTokens.length >= MAX_DEVICE_SESSIONS) {
+    user.refreshTokens = sortRefreshTokens(user.refreshTokens).slice(-(MAX_DEVICE_SESSIONS - 1));
   }
 
   user.refreshTokens.push({ tokenHash, expiresAt });
-  if (Number.isFinite(limit) && user.refreshTokens.length > limit) {
-    user.refreshTokens = sortRefreshTokens(user.refreshTokens).slice(-limit);
-  } else if (!Number.isFinite(limit) && user.refreshTokens.length > 8) {
-    user.refreshTokens = user.refreshTokens.slice(-8);
+  if (user.refreshTokens.length > MAX_DEVICE_SESSIONS) {
+    user.refreshTokens = sortRefreshTokens(user.refreshTokens).slice(-MAX_DEVICE_SESSIONS);
   }
   user.lastLogin = new Date();
   await user.save();
