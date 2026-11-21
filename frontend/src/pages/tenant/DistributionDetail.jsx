@@ -155,13 +155,28 @@ export default function DistributionDetail() {
     setBusy(true);
     setError('');
     try {
+      const editing = Boolean(editor?.id);
+      let data;
       if (editor?.id) {
-        await api.patch(`/api/distributions/${id}/beneficiaries/${editor.id}`, fields);
+        ({ data } = await api.patch(`/api/distributions/${id}/beneficiaries/${editor.id}`, fields));
       } else {
-        await api.post(`/api/distributions/${id}/beneficiaries/manual`, fields);
+        ({ data } = await api.post(`/api/distributions/${id}/beneficiaries/manual`, fields));
       }
+      const savedStudent = data.beneficiary;
       setEditor(null);
-      setList(await load());
+      setDist(data.distribution);
+      setList((current) => {
+        const found = current.some((row) => row.id === savedStudent.id);
+        const updated = editing && found
+          ? current.map((row) => (row.id === savedStudent.id ? savedStudent : row))
+          : [savedStudent, ...current.filter((row) => row.id !== savedStudent.id)];
+        return updated.sort((a, b) => a.fullName.localeCompare(b.fullName));
+      });
+      if (!editing) {
+        setQ('');
+        setFilters({});
+      }
+      setUploadMsg(data.message);
     } catch (err) {
       setError(err.response?.data?.message || 'Could not save that student.');
     } finally {
