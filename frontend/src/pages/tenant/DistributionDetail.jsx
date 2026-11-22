@@ -123,7 +123,11 @@ export default function DistributionDetail() {
     setPaymentCheckoutUrl('');
     try {
       if (status === 'active') {
-        const { data } = await api.post(`/api/payments/distributions/${id}/initialize`);
+        const { data } = await api.post(
+          `/api/payments/distributions/${id}/initialize`,
+          {},
+          { timeout: 35_000 }
+        );
         const checkoutUrl = getPaystackCheckoutUrl(
           data.payment?.authorization_url || data.distribution?.paymentUrl
         );

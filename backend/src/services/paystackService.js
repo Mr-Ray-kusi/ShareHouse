@@ -16,7 +16,7 @@ async function paystackFetch(path, { method = 'GET', body } = {}) {
       method,
       signal: AbortSignal.timeout(20_000),
       headers: {
-      Authorization: `Bearer ${env.paystackSecret}`,
+        Authorization: `Bearer ${env.paystackSecret}`,
         'Content-Type': 'application/json',
       },
       body: body ? JSON.stringify(body) : undefined,

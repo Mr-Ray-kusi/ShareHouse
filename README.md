@@ -46,6 +46,8 @@ Creating an SRC account and uploading a list are free. Campaign activation is ch
 
 Changing the number of people on an active campaign pauses it. A new payment matching the updated list is required before it can be activated again. List changes are blocked while a Paystack checkout is pending.
 
+For an existing Supabase project, run `backend/supabase/campaign-billing.sql` before deploying or using the payment API. If checkout reports that campaign payment is not set up, apply that migration in the Supabase SQL Editor and retry. The deployment warning about npm's `cache-dir` setting is unrelated to Paystack checkout.
+
 ## Local setup
 
 1. Create a free project at [supabase.com](https://supabase.com).

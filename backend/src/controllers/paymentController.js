@@ -16,6 +16,21 @@ import {
 import { getSb } from '../db/supabase.js';
 import { dbError } from '../db/model.js';
 
+function campaignBillingDbError(error) {
+  const missingBillingSchema = (
+    ['PGRST204', 'PGRST205', '42703', '42P01'].includes(error?.code)
+    && /paymentStatus|paymentAmount|paymentStudentCount|paymentReference|paymentUrl|paymentPaidAt|campaign_payments|schema cache/i
+      .test(`${error?.message || ''} ${error?.details || ''}`)
+  );
+  if (!missingBillingSchema) return dbError(error);
+
+  const err = new Error(
+    'Campaign payment is not set up in Supabase yet. Run backend/supabase/campaign-billing.sql in the Supabase SQL Editor, then try again.'
+  );
+  err.status = 503;
+  return err;
+}
+
 export const startPayment = asyncHandler(async (req, res) => {
   const dist = await Distribution.findOne({
     _id: req.params.distributionId,
@@ -83,7 +98,7 @@ export const startPayment = asyncHandler(async (req, res) => {
     .eq('paymentStatus', 'unpaid')
     .select()
     .maybeSingle();
-  if (reserveError) throw dbError(reserveError);
+  if (reserveError) throw campaignBillingDbError(reserveError);
   if (!reserved) {
     const latest = await Distribution.findOne({ _id: dist._id, tenantId: req.tenantId });
     if (
@@ -148,7 +163,7 @@ export const startPayment = asyncHandler(async (req, res) => {
     .eq('paymentReference', reservationReference)
     .select()
     .maybeSingle();
-  if (error) throw dbError(error);
+  if (error) throw campaignBillingDbError(error);
   if (!saved) {
     const latest = await Distribution.findOne({ _id: dist._id, tenantId: req.tenantId });
     if (
