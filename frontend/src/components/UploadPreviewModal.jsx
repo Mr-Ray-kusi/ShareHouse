@@ -24,6 +24,11 @@ export default function UploadPreviewModal({ preview, busy, onCancel, onApply })
   if (!preview) return null;
 
   const missingCollected = preview.missingFromFile?.collectedCount || 0;
+  const ratePesewas = preview.ratePesewas || 5;
+  const estimatedStudentCount = resetMarks || removeMissing
+    ? preview.incomingCount
+    : preview.existingCount + (preview.added?.count || 0);
+  const estimatedAmountPesewas = estimatedStudentCount * ratePesewas;
   const canReset = resetMarks && (preview.needsConfirmReset ? typed.trim().toUpperCase() === 'RESET' : true);
   const canPrune = !resetMarks && removeMissing && missingCollected > 0
     ? typed.trim().toUpperCase() === 'REMOVE'
@@ -60,6 +65,18 @@ export default function UploadPreviewModal({ preview, busy, onCancel, onApply })
       {preview.skipped?.length ? (
         <p className="mt-3 text-sm text-ink/65">{preview.skipped.length} row(s) skipped in the file.</p>
       ) : null}
+      <div className="mt-4 rounded-2xl border border-forest-700/15 bg-white px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wider text-forest-700/70">
+          Estimated campaign amount after this update
+        </p>
+        <p className="mt-1 font-display text-2xl text-forest-900">
+          GHS {(estimatedAmountPesewas / 100).toFixed(2)}
+        </p>
+        <p className="mt-1 text-sm text-ink/60">
+          {estimatedStudentCount} recipients × {ratePesewas} pesewas (GHS {(ratePesewas / 100).toFixed(2)}) each.
+          The final amount is confirmed after applying the list.
+        </p>
+      </div>
 
       <label className="mt-5 flex items-start gap-2 text-sm">
         <input

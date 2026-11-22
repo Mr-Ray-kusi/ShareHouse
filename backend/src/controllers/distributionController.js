@@ -5,6 +5,7 @@ import { looksLikeStudentIndex, searchRegex } from '../utils/search.js';
 import { deleteStoredFile, saveUploadBuffer } from '../utils/uploads.js';
 import { track } from '../services/telemetry.js';
 import {
+  campaignBillingQuote,
   activatePaidCampaign,
   clearCampaignPayment,
   pauseCampaignForListChange,
@@ -127,11 +128,11 @@ export const setDistributionStatus = asyncHandler(async (req, res) => {
       return res.status(400).json({ message: 'Upload a student list before activating this campaign.' });
     }
 
-    const amountPesewas = count * STUDENT_FEE_PESEWAS;
+    const billing = campaignBillingQuote(count);
     if (
       dist.paymentStatus !== 'paid'
-      || dist.paymentStudentCount !== count
-      || dist.paymentAmount !== amountPesewas
+      || dist.paymentStudentCount !== billing.studentCount
+      || dist.paymentAmount !== billing.amountPesewas
     ) {
       if (dist.paymentStatus === 'pending' && dist.paymentStudentCount !== count) {
         return res.status(409).json({
@@ -143,10 +144,8 @@ export const setDistributionStatus = asyncHandler(async (req, res) => {
       return res.status(402).json({
         message: 'Pay GHS 0.05 per student to activate this campaign.',
         code: 'CAMPAIGN_PAYMENT_REQUIRED',
-        studentCount: count,
-        ratePesewas: STUDENT_FEE_PESEWAS,
-        amountPesewas,
-        amountGhs: amountPesewas / 100,
+        ...billing,
+        amountGhs: billing.amountPesewas / 100,
       });
     }
     await activatePaidCampaign(dist);
@@ -209,6 +208,7 @@ export const previewBeneficiariesUpload = asyncHandler(async (req, res) => {
     ...diff.summary,
     needsConfirmRemove: diff.missingCollected.length > 0,
     needsConfirmReset: (dist.receivedCount || 0) > 0,
+    ratePesewas: STUDENT_FEE_PESEWAS,
   });
 });
 
@@ -291,6 +291,7 @@ export const uploadBeneficiaries = asyncHandler(async (req, res) => {
     columns: parsed.columns,
     headers: updated.sheetHeaders,
     distribution: updated,
+    billing: campaignBillingQuote(updated.beneficiaryCount),
   });
 });
 
@@ -328,6 +329,7 @@ export const addBeneficiary = asyncHandler(async (req, res) => {
     message: 'Student added to the list.',
     beneficiary: presentBeneficiary(created, null, headers),
     distribution: dist,
+    billing: campaignBillingQuote(dist.beneficiaryCount),
   });
 });
 
@@ -461,7 +463,11 @@ export const listBeneficiaries = asyncHandler(async (req, res) => {
     }
   }
 
-  const items = await Beneficiary.find(filter).sort({ fullName: 1 }).limit(500);
+  const [items, studentCount] = await Promise.all([
+    Beneficiary.find(filter).sort({ fullName: 1 }).limit(500),
+    Beneficiary.countDocuments({ tenantId: req.tenantId, distributionId: dist._id }),
+  ]);
+  dist.beneficiaryCount = studentCount;
   const received = items.length
     ? await Collection.find({
       tenantId: req.tenantId,
@@ -478,6 +484,7 @@ export const listBeneficiaries = asyncHandler(async (req, res) => {
     beneficiaries,
     headers,
     distribution: dist,
+    billing: campaignBillingQuote(studentCount),
   });
 });
 

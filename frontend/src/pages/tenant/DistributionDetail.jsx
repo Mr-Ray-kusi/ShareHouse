@@ -16,6 +16,7 @@ export default function DistributionDetail() {
   const { tenant, supportMode } = useAuth();
   const isSrc = tenant?.subscriptionPlan === 'src';
   const [dist, setDist] = useState(null);
+  const [billing, setBilling] = useState(null);
   const [list, setList] = useState([]);
   const [headers, setHeaders] = useState([]);
   const [q, setQ] = useState('');
@@ -35,6 +36,7 @@ export default function DistributionDetail() {
       params: search ? { q: search } : {},
     });
     setDist(data.distribution);
+    setBilling(data.billing);
     setHeaders(data.headers || []);
     return data.beneficiaries || [];
   }
@@ -89,6 +91,7 @@ export default function DistributionDetail() {
       const { data } = await api.post(`/api/distributions/${id}/beneficiaries`, form, { timeout: 60000 });
       setUploadMsg(`${data.message}${data.skipped?.length ? ` · ${data.skipped.length} rows skipped` : ''}`);
       setDist(data.distribution);
+      setBilling(data.billing);
       setPreview(null);
       setPendingFile(null);
       const rows = await load();
@@ -111,6 +114,11 @@ export default function DistributionDetail() {
       if (status === 'active' && err.response?.data?.code === 'CAMPAIGN_PAYMENT_REQUIRED') {
         if (Number.isInteger(err.response.data.studentCount)) {
           setDist((current) => ({ ...current, beneficiaryCount: err.response.data.studentCount }));
+          setBilling({
+            studentCount: err.response.data.studentCount,
+            ratePesewas: err.response.data.ratePesewas,
+            amountPesewas: err.response.data.amountPesewas,
+          });
         }
         try {
           const { data } = await api.post(`/api/payments/distributions/${id}/initialize`);
@@ -167,6 +175,11 @@ export default function DistributionDetail() {
       const savedStudent = data.beneficiary;
       setEditor(null);
       setDist(data.distribution);
+      setBilling(data.billing || {
+        studentCount: data.distribution.beneficiaryCount,
+        ratePesewas: 5,
+        amountPesewas: data.distribution.beneficiaryCount * 5,
+      });
       setList((current) => {
         const found = current.some((row) => row.id === savedStudent.id);
         const updated = editing && found
@@ -253,8 +266,11 @@ export default function DistributionDetail() {
   }, [list, filters, headers, needle]);
 
   const pendingWalkIns = exceptions.filter((row) => row.status === 'pending');
-  const studentCount = Number(dist?.beneficiaryCount) || 0;
-  const campaignAmountPesewas = studentCount * 5;
+  const studentCount = Number(billing?.studentCount ?? dist?.beneficiaryCount) || 0;
+  const ratePesewas = Number(billing?.ratePesewas) || 5;
+  const campaignAmountPesewas = Number.isSafeInteger(billing?.amountPesewas)
+    ? billing.amountPesewas
+    : studentCount * ratePesewas;
   const paymentMatchesList = (
     dist?.paymentStatus === 'paid'
     && dist.paymentStudentCount === studentCount
@@ -268,7 +284,7 @@ export default function DistributionDetail() {
       <HallHero
         eyebrow={dist.status}
         title={dist.title}
-        subtitle={`${dist.itemName || 'Welfare item'} · ${dist.beneficiaryCount} on list · ${dist.receivedCount} received${tenant?.name ? ` · ${tenant.name}` : ''}`}
+        subtitle={`${dist.itemName || 'Welfare item'} · ${studentCount} on list · ${dist.receivedCount} received${tenant?.name ? ` · ${tenant.name}` : ''}`}
       />
 
       {!supportMode && (
@@ -309,7 +325,7 @@ export default function DistributionDetail() {
           <p className="mt-1 text-sm text-ink/60">
             {paymentMatchesList
               ? `Payment is confirmed for all ${studentCount} students on this campaign.`
-              : `${studentCount} students × GHS 0.05 each. Payment is required only when you activate the campaign.`}
+              : `${studentCount} recipients × ${ratePesewas} pesewas (GHS ${(ratePesewas / 100).toFixed(2)}) each = GHS ${(campaignAmountPesewas / 100).toFixed(2)}. Payment is required only when you activate the campaign.`}
           </p>
         </div>
       )}

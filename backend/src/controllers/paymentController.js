@@ -4,8 +4,8 @@ import { env } from '../config/env.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { track } from '../services/telemetry.js';
 import {
+  campaignBillingQuote,
   clearCampaignPayment,
-  STUDENT_FEE_PESEWAS,
   activatePaidCampaign,
 } from '../services/campaignBilling.js';
 import {
@@ -30,10 +30,8 @@ export const startPayment = asyncHandler(async (req, res) => {
   if (!studentCount) {
     return res.status(400).json({ message: 'Upload a student list before paying to activate this campaign.' });
   }
-  const amountPesewas = studentCount * STUDENT_FEE_PESEWAS;
-  if (!Number.isSafeInteger(amountPesewas)) {
-    return res.status(400).json({ message: 'This student list is too large to calculate a valid payment.' });
-  }
+  const billing = campaignBillingQuote(studentCount);
+  const amountPesewas = billing.amountPesewas;
   if (dist.paymentStatus === 'paid' && dist.paymentStudentCount === studentCount && dist.paymentAmount === amountPesewas) {
     return res.json({ distribution: dist, alreadyPaid: true });
   }

@@ -6,6 +6,20 @@ import {
 
 export const STUDENT_FEE_PESEWAS = 5;
 
+export function campaignBillingQuote(studentCount) {
+  const amountPesewas = studentCount * STUDENT_FEE_PESEWAS;
+  if (!Number.isSafeInteger(studentCount) || studentCount < 0 || !Number.isSafeInteger(amountPesewas)) {
+    const err = new Error('This student list is too large to calculate a valid payment.');
+    err.status = 400;
+    throw err;
+  }
+  return {
+    studentCount,
+    ratePesewas: STUDENT_FEE_PESEWAS,
+    amountPesewas,
+  };
+}
+
 export function clearCampaignPayment(dist) {
   dist.paymentStatus = 'unpaid';
   dist.paymentAmount = 0;
