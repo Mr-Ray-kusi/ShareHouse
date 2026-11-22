@@ -47,7 +47,9 @@ export default function Assistants() {
     setJoinUrl(data.joinUrl || '');
     setJoinPath(data.joinPath || '');
     const columns = options.columns || [];
-    const selectedColumn = columns.find((column) => column.header === assignColumn)
+    const selectedColumn = columns.find((column) => (
+      column.header === assignColumn && column.values?.length
+    ))
       || columns.find((column) => /hall/i.test(column.header) && column.values?.length)
       || columns.find((column) => column.values?.length)
       || columns[0];

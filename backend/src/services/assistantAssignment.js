@@ -1,7 +1,6 @@
 import { Beneficiary, Invite, Distribution, HallAllocation } from '../models/index.js';
 import { foldSearch } from '../utils/search.js';
-import { classifySheetHeaders } from './listService.js';
-import { getActiveDistribution } from './activeDistribution.js';
+import { classifySheetHeaders, resolveListHeaders } from './listService.js';
 
 const IDENTITY_HEADERS = [
   'student index', 'index number', 'index no', 'index', 'matric', 'student id',
@@ -230,32 +229,22 @@ function uniqueSorted(values) {
 }
 
 export async function loadAssignmentOptions(tenantId) {
-  const dist =
-    (await getActiveDistribution(tenantId)) ||
-    (await Distribution.findOne({ tenantId }).sort({ createdAt: -1 }));
-  const fallback = [
-    { header: 'Level', values: ['100', '200', '300', '400'] },
-    { header: 'Hall', values: [] },
-  ];
+  const dist = await Distribution.findOne({ tenantId, status: 'active' }).sort({ updatedAt: -1 })
+    || await Distribution.findOne({ tenantId }).sort({ createdAt: -1 });
   if (!dist) {
-    return { distribution: null, columns: fallback };
+    return { distribution: null, columns: [] };
   }
-  const headers = dist.sheetHeaders?.length ? dist.sheetHeaders : ['Student Index', 'Full Name', 'Level', 'Phone'];
-  const candidates = assignmentColumnCandidates(headers);
   const items = await Beneficiary.find({ tenantId, distributionId: dist._id })
-    .select('level sheetRow')
+    .select('studentIndex fullName level phone sheetRow')
     .limit(8000);
+  const headers = resolveListHeaders(dist.sheetHeaders || [], items);
+  const candidates = assignmentColumnCandidates(headers);
   const columns = (candidates.length ? candidates : ['Level', 'Hall']).map((header) => ({
     header,
     values: uniqueSorted(items.map((row) => sheetCell(row, header))).slice(0, 60),
   }));
-  for (const row of columns) {
-    if (row.header === 'Level' && !row.values.length) {
-      row.values = ['100', '200', '300', '400'];
-    }
-  }
   return {
     distribution: { id: dist._id, title: dist.title, status: dist.status },
-    columns: columns.length ? columns : fallback,
+    columns,
   };
 }
