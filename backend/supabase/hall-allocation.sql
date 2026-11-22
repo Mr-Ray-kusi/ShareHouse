@@ -1,5 +1,14 @@
 -- Explicit hall allocations and assistant membership.
--- Run in the Supabase SQL Editor on existing projects.
+-- Run schema.sql first on a new project. On an existing project, run this only
+-- after public.invites has been created.
+
+do $$
+begin
+  if to_regclass('public.invites') is null then
+    raise exception 'The base ShareHouse schema is missing public.invites. Run backend/supabase/schema.sql first, then rerun backend/supabase/hall-allocation.sql.';
+  end if;
+end
+$$;
 
 create table if not exists public.hall_allocations (
   id uuid primary key default gen_random_uuid(),

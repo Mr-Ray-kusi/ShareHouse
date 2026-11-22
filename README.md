@@ -51,7 +51,7 @@ For an existing Supabase project, run `backend/supabase/campaign-billing.sql` an
 ## Local setup
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. In the dashboard SQL Editor, run `backend/supabase/schema.sql`, followed by `backend/supabase/walk-in-add-on-payments.sql`. On an existing project, run `backend/supabase/campaign-billing.sql`, `backend/supabase/share-day.sql`, `backend/supabase/hall-allocation.sql`, and then `backend/supabase/walk-in-add-on-payments.sql`.
+2. In the dashboard SQL Editor, run `backend/supabase/schema.sql` first; this creates the core tables, including `public.invites`. Then run `backend/supabase/walk-in-add-on-payments.sql`. On an existing project with the core tables already created, run `backend/supabase/campaign-billing.sql`, `backend/supabase/share-day.sql`, `backend/supabase/hall-allocation.sql`, and then `backend/supabase/walk-in-add-on-payments.sql`. If `hall-allocation.sql` reports that `public.invites` is missing, run `schema.sql` in the same Supabase project first, then rerun the hall migration.
 3. Copy env files and fill in the project URL plus the **service role** key (Settings → API). Never put that key in the frontend.
 
 ```bash
