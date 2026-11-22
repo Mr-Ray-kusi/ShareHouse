@@ -9,15 +9,8 @@ import {
   defaultHeaders,
   findDuplicateIndex,
   presentBeneficiary,
-  refreshDistributionCounts,
   resolveListHeaders,
 } from '../services/listService.js';
-import { createCollectionMark } from '../services/collectionService.js';
-import {
-  clearCampaignPayment,
-  pauseCampaignForListChange,
-  requireNoPendingPayment,
-} from '../services/campaignBilling.js';
 
 function walkInIndex() {
   const rand = crypto.randomBytes(2).toString('hex').toUpperCase();
@@ -64,6 +57,7 @@ function presentException(row) {
   return {
     id: String(row._id || row.id),
     status: row.status,
+    addonPaymentId: row.addonPaymentId ? String(row.addonPaymentId) : null,
     studentIndex: row.studentIndex,
     fullName: row.fullName,
     level: row.level,
@@ -131,11 +125,13 @@ export const createException = asyncHandler(async (req, res) => {
     tenantId: req.tenantId,
     distributionId: dist._id,
     studentIndex,
-    status: 'pending',
+    status: { $in: ['pending', 'payment_pending'] },
   });
   if (existingPending) {
     return res.status(409).json({
-      message: 'A walk-in request for this ID is already waiting for approval.',
+      message: existingPending.status === 'payment_pending'
+        ? 'A walk-in request for this ID is already awaiting SRC payment.'
+        : 'A walk-in request for this ID is already waiting for SRC review.',
       exception: presentException(existingPending),
     });
   }
@@ -184,7 +180,7 @@ export const createException = asyncHandler(async (req, res) => {
   track({ pillar: 'funnel', name: 'exception_create', tenantId: req.tenantId || '', role: req.user?.role || '' });
 
   res.status(201).json({
-    message: 'Student request sent. Wait for the linked SRC administrator to approve before verification.',
+    message: 'Student request sent. The linked SRC administrator must pay the add-on fee before the student is added.',
     exception: payload,
   });
 });
@@ -241,71 +237,8 @@ export const reviewException = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'action must be approve or reject.' });
   }
 
-  const dist = await Distribution.findOne({ _id: row.distributionId, tenantId: req.tenantId });
-  if (!dist || dist.status !== 'active') {
-    return res.status(400).json({ message: 'This distribution is not active.' });
-  }
-  await requireNoPendingPayment(dist);
-
-  const headers = await listHeaders(dist);
-  let beneficiary = await findDuplicateIndex(req.tenantId, dist._id, row.studentIndex);
-  const linkedExisting = Boolean(beneficiary);
-  if (!beneficiary) {
-    await pauseCampaignForListChange(dist);
-    const payload = beneficiaryPayload({
-      studentIndex: row.studentIndex,
-      fullName: row.fullName,
-      level: row.level,
-      phone: row.phone,
-      sheetRow: row.sheetRow || {},
-    }, headers);
-    beneficiary = await Beneficiary.create({
-      tenantId: req.tenantId,
-      distributionId: dist._id,
-      ...payload,
-    });
-    clearCampaignPayment(dist);
-    if ((dist.sheetHeaders || []).join('|') !== headers.join('|')) dist.sheetHeaders = headers;
-    await refreshDistributionCounts(dist);
-  }
-
-  const markReceived = !isSrcReviewer && Boolean(req.body?.markReceived) && linkedExisting;
-  let markPayload = null;
-  if (markReceived) {
-    try {
-      const marked = await createCollectionMark({
-        tenantId: req.tenantId,
-        user: req.user,
-        beneficiary,
-        dist,
-      });
-      markPayload = marked.payload;
-      req.app.get('io')?.to(`tenant:${req.tenantId}`).emit('collection:new', marked.payload);
-    } catch (err) {
-      if (err.status !== 409) throw err;
-    }
-  }
-
-  row.status = 'approved';
-  row.reviewedBy = req.user._id;
-  row.reviewedByName = req.user.name;
-  row.reviewNote = reviewNote || (linkedExisting ? 'Already on the list; linked.' : 'Approved');
-  row.beneficiaryId = beneficiary._id;
-  row.markedOnApprove = Boolean(markPayload);
-  await row.save();
-
-  const payload = presentException(row);
-  req.app.get('io')?.to(`tenant:${req.tenantId}`).emit('exception:updated', { exception: payload });
-  track({ pillar: 'funnel', name: 'exception_approve', tenantId: req.tenantId || '' });
-
-  res.json({
-    message: linkedExisting
-      ? `${row.fullName} was already on the list. Walk-in linked to that row.`
-      : `${row.fullName} was added to the list. Pay GHS 0.05 per student to reactivate the campaign before anyone collects.`,
-    exception: payload,
-    beneficiary: presentBeneficiary(beneficiary, markPayload?.collection, headers),
-    collection: markPayload?.collection || null,
-    distribution: dist,
+  return res.status(409).json({
+    message: 'Walk-ins are added only after the SRC pays GHS 0.05 per selected student from the Student additions section.',
   });
 });
 

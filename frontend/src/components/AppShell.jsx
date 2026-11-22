@@ -1,5 +1,5 @@
 import { NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Package, Users, LogOut, Building2 } from 'lucide-react';
+import { LayoutDashboard, Package, Users, LogOut, Building2, UserPlus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import PersistentOutlet from './PersistentOutlet';
 
@@ -59,6 +59,7 @@ export default function AppShell() {
     { to: '/app/distributions', label: 'Distributions', icon: Package },
     { to: '/app/assistants', label: 'Hall allocation', icon: Users },
     ...(isSrc ? [{ to: '/app/halls', label: 'Campus halls', icon: Building2 }] : []),
+    ...(isSrc ? [{ to: '/app/additions', label: 'Student additions', icon: UserPlus }] : []),
   ];
 
   return (

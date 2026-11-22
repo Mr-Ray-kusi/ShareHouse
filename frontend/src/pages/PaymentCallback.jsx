@@ -9,6 +9,7 @@ export default function PaymentCallback() {
   const [status, setStatus] = useState('verifying');
   const [message, setMessage] = useState('Confirming campaign payment…');
   const [distributionId, setDistributionId] = useState(params.get('distribution') || '');
+  const [paymentType, setPaymentType] = useState(params.get('type') || 'campaign');
 
   useEffect(() => {
     const reference = params.get('reference') || params.get('trxref');
@@ -17,6 +18,7 @@ export default function PaymentCallback() {
         if (!reference) throw new Error('Paystack did not return a payment reference.');
         const { data } = await api.get('/api/payments/verify', { params: { reference } });
         if (data.distribution?._id) setDistributionId(String(data.distribution._id));
+        if (data.paymentType) setPaymentType(data.paymentType);
         setMessage(data.message || 'Payment confirmed. The campaign is now active.');
         try {
           await refreshMe();
@@ -37,12 +39,20 @@ export default function PaymentCallback() {
       <div className="card max-w-md w-full p-8 text-center">
         <p className="text-xs uppercase tracking-widest text-forest-700">Paystack</p>
         <h1 className="font-display text-3xl mt-2">
-          {status === 'ok' ? 'Campaign payment confirmed' : status === 'err' ? 'Payment check' : 'Working…'}
+          {status === 'ok'
+            ? paymentType === 'student_additions' ? 'Student additions paid' : 'Campaign payment confirmed'
+            : status === 'err' ? 'Payment check' : 'Working…'}
         </h1>
         <p className="mt-3 text-sm text-ink/70">{message}</p>
         <div className="mt-6">
-          {user && status === 'ok' ? (
-            <Link to={distributionId ? `/app/distributions/${distributionId}` : '/app'} className="btn-primary">Open campaign</Link>
+          {user && paymentType === 'student_additions' ? (
+            <Link to="/app/additions" className="btn-primary">
+              {status === 'ok' ? 'View student additions' : 'Return to student additions'}
+            </Link>
+          ) : user && status === 'ok' ? (
+            <Link to={distributionId ? `/app/distributions/${distributionId}` : '/app'} className="btn-primary">
+              Open campaign
+            </Link>
           ) : (
             <Link to="/login" className="btn-primary">Back to sign in</Link>
           )}

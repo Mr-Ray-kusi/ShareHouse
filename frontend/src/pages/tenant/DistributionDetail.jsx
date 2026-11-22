@@ -8,7 +8,7 @@ import SearchBar, { ColumnFilters, applyFilters, rowMatchesQuery } from '../../c
 import HallHero from '../../components/HallHero';
 import UploadPreviewModal from '../../components/UploadPreviewModal';
 import StudentEditor from '../../components/StudentEditor';
-import ExceptionPanel, { reviewWalkIn } from '../../components/ExceptionPanel';
+import ExceptionPanel from '../../components/ExceptionPanel';
 
 function getPaystackCheckoutUrl(value) {
   try {
@@ -41,7 +41,6 @@ export default function DistributionDetail() {
   const [preview, setPreview] = useState(null);
   const [editor, setEditor] = useState(null);
   const [exceptions, setExceptions] = useState([]);
-  const [exceptionBusy, setExceptionBusy] = useState('');
   const [removing, setRemoving] = useState(false);
 
   async function load(search) {
@@ -276,7 +275,7 @@ export default function DistributionDetail() {
     return applyFilters(searched, filters, headers);
   }, [list, filters, headers, needle]);
 
-  const pendingWalkIns = exceptions.filter((row) => row.status === 'pending');
+  const pendingWalkIns = exceptions.filter((row) => ['pending', 'payment_pending'].includes(row.status));
   const studentCount = Number(billing?.studentCount ?? dist?.beneficiaryCount) || 0;
   const ratePesewas = Number(billing?.ratePesewas) || 5;
   const campaignAmountPesewas = Number.isSafeInteger(billing?.amountPesewas)
@@ -359,44 +358,21 @@ export default function DistributionDetail() {
 
       {pendingWalkIns.length > 0 && !supportMode && (
         <section className="mt-8">
-          <h2 className="font-display text-2xl">Walk-ins waiting</h2>
+          <h2 className="font-display text-2xl">Student additions</h2>
           <p className="text-sm text-ink/60 mt-1">
             {isSrc
-              ? 'Review assistant requests here. Approved students still require a paid active campaign before verification.'
-              : 'Only the linked SRC administrator can approve or reject a walk-in.'}
+              ? 'Requests become available on the general list after the SRC pays the incremental fee.'
+              : 'The linked SRC administrator must pay for new students before they are added to this list.'}
           </p>
           <div className="mt-3">
             <ExceptionPanel
               items={pendingWalkIns}
-              canReview={!supportMode && isSrc}
-              allowMarkReceived={false}
-              busyId={exceptionBusy}
-              onApprove={async (row, markReceived) => {
-                setExceptionBusy(row.id);
-                try {
-                  await reviewWalkIn(row.id, 'approve', { markReceived });
-                  await loadExceptions();
-                  setList(await load());
-                } catch (err) {
-                  setError(err.response?.data?.message || 'Could not approve that walk-in.');
-                } finally {
-                  setExceptionBusy('');
-                }
-              }}
-              onReject={async (row) => {
-                const note = window.prompt('Reason for rejecting this walk-in?', 'Not eligible') || 'Rejected';
-                setExceptionBusy(row.id);
-                try {
-                  await reviewWalkIn(row.id, 'reject', { note });
-                  await loadExceptions();
-                } catch (err) {
-                  setError(err.response?.data?.message || 'Could not reject that walk-in.');
-                } finally {
-                  setExceptionBusy('');
-                }
-              }}
+              canReview={false}
             />
           </div>
+          {isSrc && !supportMode ? (
+            <Link to="/app/additions" className="btn-primary mt-3 inline-flex">Review and pay requests</Link>
+          ) : null}
         </section>
       )}
 

@@ -47,6 +47,8 @@ export async function initializePayment({
   studentCount,
   amountPesewas,
   callbackUrl,
+  paymentType,
+  addonPaymentId,
 }) {
   if (!Number.isSafeInteger(amountPesewas) || amountPesewas <= 0) {
     const err = new Error('Payment amount must be a positive whole number of pesewas.');
@@ -63,6 +65,8 @@ export async function initializePayment({
       distributionId,
       studentCount,
       amountPesewas,
+      ...(paymentType ? { paymentType } : {}),
+      ...(addonPaymentId ? { addonPaymentId } : {}),
       custom_fields: [
         { display_name: 'SRC', variable_name: 'tenant_id', value: tenantId },
         { display_name: 'Campaign', variable_name: 'distribution_id', value: distributionId },

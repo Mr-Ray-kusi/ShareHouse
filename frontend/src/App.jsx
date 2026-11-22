@@ -23,6 +23,7 @@ import Distributions from './pages/tenant/Distributions';
 import DistributionDetail from './pages/tenant/DistributionDetail';
 import Assistants from './pages/tenant/Assistants';
 import SrcHalls from './pages/tenant/SrcHalls';
+import SrcWalkIns from './pages/tenant/SrcWalkIns';
 import AssistantHome from './pages/assistant/AssistantHome';
 
 function HomeRedirect() {
@@ -63,6 +64,7 @@ export default function App() {
       >
         <Route path="/app" element={<TenantDashboard />} />
         <Route path="/app/halls" element={<SrcHalls />} />
+        <Route path="/app/additions" element={<SrcWalkIns />} />
         <Route path="/app/halls/:hallId" element={<TenantDashboard />} />
         <Route path="/app/distributions" element={<Distributions />} />
         <Route path="/app/distributions/:id" element={<DistributionDetail />} />

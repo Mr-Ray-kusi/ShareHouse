@@ -21,11 +21,12 @@ export const ListException = createModel({
     'reviewNote',
     'beneficiaryId',
     'markedOnApprove',
+    'addonPaymentId',
     'sheetRow',
     'createdAt',
     'updatedAt',
   ],
-  uuidFields: ['distributionId', 'requestedBy', 'reviewedBy', 'beneficiaryId'],
+  uuidFields: ['distributionId', 'requestedBy', 'reviewedBy', 'beneficiaryId', 'addonPaymentId'],
   dateFields: ['createdAt', 'updatedAt'],
   jsonFields: ['sheetRow'],
   prepare(doc) {

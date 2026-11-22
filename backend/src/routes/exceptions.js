@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import * as exceptions from '../controllers/exceptionController.js';
+import * as exceptionPayments from '../controllers/exceptionPaymentController.js';
 import { authenticate, requireRoles, requireActiveTenant, blockSupportWrites } from '../middleware/auth.js';
 
 const photo = multer({
@@ -20,6 +21,8 @@ const photo = multer({
 const router = Router();
 router.use(authenticate, requireActiveTenant, blockSupportWrites);
 router.get('/', requireRoles('tenant_admin', 'assistant', 'super_admin'), exceptions.listExceptions);
+router.get('/payment', requireRoles('tenant_admin'), exceptionPayments.getPendingExceptionPayment);
+router.post('/payment', requireRoles('tenant_admin'), exceptionPayments.startExceptionPayment);
 router.post(
   '/',
   requireRoles('assistant', 'tenant_admin'),

@@ -44,14 +44,14 @@ Each account supports up to two active device sessions. Signing in on another de
 
 Creating an SRC account and uploading a list are free. Campaign activation is charged at **GHS 0.05 per student** (5 pesewas per list row). The API counts the saved beneficiaries and calculates the amount in pesewas; a campaign remains inactive until Paystack confirms the exact amount, currency, campaign, and student count. A successful verified payment activates the campaign.
 
-Changing the number of people on an active campaign pauses it. A new payment matching the updated list is required before it can be activated again. List changes are blocked while a Paystack checkout is pending.
+Changing the number of people through campaign editing still requires the campaign to be paid again. SRC administrators can add submitted walk-in requests from **Student additions**; this bills only the newly selected students at GHS 0.05 each. Previously paid recipients are not charged again, and additions enter the active hall list only after Paystack confirms payment.
 
-For an existing Supabase project, run `backend/supabase/campaign-billing.sql` before deploying or using the payment API. If checkout reports that campaign payment is not set up, apply that migration in the Supabase SQL Editor and retry. The deployment warning about npm's `cache-dir` setting is unrelated to Paystack checkout.
+For an existing Supabase project, run `backend/supabase/campaign-billing.sql` and `backend/supabase/walk-in-add-on-payments.sql` before deploying or using the payment API. If add-on payment reports that it is not set up, apply the latter migration in the Supabase SQL Editor and retry. The deployment warning about npm's `cache-dir` setting is unrelated to Paystack checkout.
 
 ## Local setup
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. In the dashboard SQL Editor, run `backend/supabase/schema.sql`. On an existing project, run `backend/supabase/campaign-billing.sql`, `backend/supabase/share-day.sql`, and `backend/supabase/hall-allocation.sql`.
+2. In the dashboard SQL Editor, run `backend/supabase/schema.sql`, followed by `backend/supabase/walk-in-add-on-payments.sql`. On an existing project, run `backend/supabase/campaign-billing.sql`, `backend/supabase/share-day.sql`, `backend/supabase/hall-allocation.sql`, and then `backend/supabase/walk-in-add-on-payments.sql`.
 3. Copy env files and fill in the project URL plus the **service role** key (Settings → API). Never put that key in the frontend.
 
 ```bash

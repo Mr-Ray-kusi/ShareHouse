@@ -5,6 +5,10 @@ import { assertHallUnderSrc, isSrcTenant, listHallsForSrc } from '../utils/srcHa
 import { tenantDashboard } from './dashboardController.js';
 import { searchBeneficiaries } from './collectionController.js';
 import { exceptionPhoto, listExceptions, reviewException } from './exceptionController.js';
+import {
+  getPendingExceptionPayment,
+  startExceptionPayment,
+} from './exceptionPaymentController.js';
 
 function requireSrc(req, res) {
   if (!isSrcTenant(req.tenant)) {
@@ -49,7 +53,7 @@ export const listSrcHalls = asyncHandler(async (req, res) => {
       ? await ListException.countDocuments({
         tenantId: hall.tenantId,
         distributionId: dist._id,
-        status: 'pending',
+        status: { $in: ['pending', 'payment_pending'] },
       })
       : 0;
     summaries.push({
@@ -97,4 +101,23 @@ export const srcReviewHallException = asyncHandler(async (req, res, next) => {
   req.tenantId = hall.tenantId;
   req.tenant = hall;
   await reviewException(req, res, next);
+});
+
+async function srcHallExceptionPayment(req, res, next, handler) {
+  if (!requireSrc(req, res)) return;
+  const srcTenantId = req.tenant.tenantId;
+  const hall = await assertHallUnderSrc(req.tenant, req.params.tenantId);
+  req.srcReview = true;
+  req.srcTenantId = srcTenantId;
+  req.tenantId = hall.tenantId;
+  req.tenant = hall;
+  await handler(req, res, next);
+}
+
+export const getSrcHallExceptionPayment = asyncHandler(async (req, res, next) => {
+  await srcHallExceptionPayment(req, res, next, getPendingExceptionPayment);
+});
+
+export const startSrcHallExceptionPayment = asyncHandler(async (req, res, next) => {
+  await srcHallExceptionPayment(req, res, next, startExceptionPayment);
 });

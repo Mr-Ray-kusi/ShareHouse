@@ -4,7 +4,8 @@ import { apiOrigin } from '../api/baseUrl';
 
 function statusLabel(status) {
   if (status === 'pending') return 'Waiting';
-  if (status === 'approved') return 'Approved';
+  if (status === 'payment_pending') return 'Awaiting SRC payment';
+  if (status === 'approved') return 'Added to list';
   if (status === 'rejected') return 'Rejected';
   if (status === 'cancelled') return 'Cancelled';
   return status;
@@ -38,13 +39,17 @@ function PhotoThumb({ id, hasPhoto, photoBase = '/api/exceptions' }) {
 export default function ExceptionPanel({
   items = [],
   canReview = false,
+  canReject = canReview,
   allowMarkReceived = true,
   busyId = '',
+  locked = false,
   photoBase = '/api/exceptions',
   compact = false,
   onApprove,
   onReject,
   onCancel,
+  selectedIds = [],
+  onSelect,
   emptyMessage = 'No walk-in requests.',
 }) {
   if (!items.length) {
@@ -123,45 +128,63 @@ export default function ExceptionPanel({
               ) : null}
               <PhotoThumb id={row.id} hasPhoto={showPhoto} photoBase={photoBase} />
             </div>
-            <span className="rounded-full bg-mist px-2 py-1 text-xs font-semibold uppercase tracking-wider">
-              {statusLabel(row.status)}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-mist px-2 py-1 text-xs font-semibold uppercase tracking-wider">
+                {statusLabel(row.status)}
+              </span>
+              {row.status === 'pending' && onSelect ? (
+                <label className="flex items-center gap-1 text-xs font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(row.id)}
+                    disabled={locked}
+                    onChange={() => onSelect(row)}
+                    aria-label={`Select ${row.fullName} for SRC payment`}
+                  />
+                  Select
+                </label>
+              ) : null}
+            </div>
           </div>
-          {row.status === 'pending' && canReview ? (
+          {row.status === 'pending' && (canReview || canReject) ? (
             <div className="mt-3 flex flex-wrap gap-2">
-              {allowMarkReceived ? (
+              {canReview && allowMarkReceived ? (
                 <button
                   type="button"
                   className="btn-primary text-xs"
-                  disabled={busyId === row.id}
+                  disabled={locked || busyId === row.id}
                   onClick={() => onApprove?.(row, true)}
                 >
                   Approve and mark received
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="btn-ghost text-xs"
-                disabled={busyId === row.id}
-                onClick={() => onApprove?.(row, false)}
-              >
-                {allowMarkReceived ? 'Approve only' : 'Approve student'}
-              </button>
-              <button
-                type="button"
-                className="btn-danger text-xs"
-                disabled={busyId === row.id}
-                onClick={() => onReject?.(row)}
-              >
-                Reject
-              </button>
+              {canReview ? (
+                <button
+                  type="button"
+                  className="btn-ghost text-xs"
+                  disabled={locked || busyId === row.id}
+                  onClick={() => onApprove?.(row, false)}
+                >
+                  {allowMarkReceived ? 'Approve only' : 'Approve student'}
+                </button>
+              ) : null}
+              {canReject ? (
+                <button
+                  type="button"
+                  className="btn-danger text-xs"
+                  disabled={locked || busyId === row.id}
+                  onClick={() => onReject?.(row)}
+                >
+                  Reject
+                </button>
+              ) : null}
             </div>
           ) : null}
           {row.status === 'pending' && onCancel && !canReview ? (
             <button
               type="button"
               className="btn-ghost mt-3 text-xs"
-              disabled={busyId === row.id}
+              disabled={locked || busyId === row.id}
               onClick={() => onCancel?.(row)}
             >
               Cancel request

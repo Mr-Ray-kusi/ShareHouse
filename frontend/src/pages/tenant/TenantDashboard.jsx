@@ -10,7 +10,7 @@ import SearchBar, { ColumnFilters, applyFilters, rowMatchesQuery } from '../../c
 import { downloadCsv, printSheet, sortSheetRows } from '../../utils/sheetExport';
 import HallHero from '../../components/HallHero';
 import VoidMarkModal from '../../components/VoidMarkModal';
-import ExceptionPanel, { reviewWalkIn } from '../../components/ExceptionPanel';
+import ExceptionPanel from '../../components/ExceptionPanel';
 
 function activityRow(item) {
   return {
@@ -59,7 +59,6 @@ export default function TenantDashboard() {
   const { tenant } = useAuth();
   const monitor = Boolean(hallId);
   const isSrc = tenant?.subscriptionPlan === 'src';
-  const canReview = monitor || isSrc;
   const hallApi = monitor ? `/api/src/halls/${hallId}` : '';
   const [data, setData] = useState(null);
   const [query, setQuery] = useState('');
@@ -74,7 +73,6 @@ export default function TenantDashboard() {
   const [voidRow, setVoidRow] = useState(null);
   const [voidBusy, setVoidBusy] = useState(false);
   const [exceptions, setExceptions] = useState([]);
-  const [exceptionBusy, setExceptionBusy] = useState('');
   const listRequested = useRef(false);
 
   async function loadDesk() {
@@ -101,8 +99,10 @@ export default function TenantDashboard() {
 
   async function loadExceptions() {
     try {
-      const { data } = await api.get(monitor ? `${hallApi}/exceptions` : '/api/exceptions', { params: { status: 'pending' } });
-      setExceptions(data.exceptions || []);
+      const { data } = await api.get(monitor ? `${hallApi}/exceptions` : '/api/exceptions');
+      setExceptions((data.exceptions || []).filter((row) => (
+        ['pending', 'payment_pending'].includes(row.status)
+      )));
     } catch (_err) {
       /* ignore */
     }
@@ -173,14 +173,19 @@ export default function TenantDashboard() {
     socket.on('exception:updated', (payload) => {
       if (!payload?.exception) return;
       setExceptions((prev) => {
-        if (payload.exception.status === 'pending') {
+        if (['pending', 'payment_pending'].includes(payload.exception.status)) {
           return [payload.exception, ...prev.filter((row) => row.id !== payload.exception.id)];
         }
         return prev.filter((row) => row.id !== payload.exception.id);
       });
+      if (payload.exception.status === 'approved') {
+        loadDesk().catch((err) => setError(err.response?.data?.message || 'Could not refresh the campaign.'));
+        listRequested.current = false;
+        if (view) loadList().catch((err) => setError(err.response?.data?.message || 'Could not refresh the student list.'));
+      }
     });
     return () => socket.disconnect();
-  }, [hallId, pathname]);
+  }, [hallId, pathname, view]);
 
   const stats = deskStats(data?.stats);
   const dist = data?.distribution;
@@ -272,58 +277,22 @@ export default function TenantDashboard() {
 
       {exceptions.length > 0 && (
         <section className="mt-6 card p-4">
-          <h2 className="font-display text-2xl">Walk-ins waiting</h2>
+          <h2 className="font-display text-2xl">Student additions</h2>
           <p className="text-sm text-ink/60 mt-1">
-            {canReview
-              ? monitor
-                ? 'Review requests for this hall. Approved students can then be verified by its assistants.'
-                : 'Approve requests submitted by your assistants. Approved students can then be verified.'
-              : 'Only the linked SRC administrator can approve or reject these requests.'}
+            {monitor || isSrc
+              ? 'These requests are added to the active list only after the SRC pays for them.'
+              : 'The linked SRC administrator must pay for new students before they can be verified.'}
           </p>
           <div className="mt-3">
             <ExceptionPanel
               items={exceptions}
-              canReview={canReview}
-              allowMarkReceived={false}
+              canReview={false}
               photoBase={monitor ? `${hallApi}/exceptions` : '/api/exceptions'}
-              busyId={exceptionBusy}
-              onApprove={async (row, markReceived) => {
-                setExceptionBusy(row.id);
-                try {
-                  await reviewWalkIn(
-                    row.id,
-                    'approve',
-                    { markReceived },
-                    monitor ? `${hallApi}/exceptions/${row.id}/review` : undefined
-                  );
-                  await loadExceptions();
-                  await loadDesk();
-                  listRequested.current = false;
-                } catch (err) {
-                  setError(err.response?.data?.message || 'Could not approve that walk-in.');
-                } finally {
-                  setExceptionBusy('');
-                }
-              }}
-              onReject={async (row) => {
-                const note = window.prompt('Reason for rejecting this walk-in?', 'Not eligible') || 'Rejected';
-                setExceptionBusy(row.id);
-                try {
-                  await reviewWalkIn(
-                    row.id,
-                    'reject',
-                    { note },
-                    monitor ? `${hallApi}/exceptions/${row.id}/review` : undefined
-                  );
-                  await loadExceptions();
-                } catch (err) {
-                  setError(err.response?.data?.message || 'Could not reject that walk-in.');
-                } finally {
-                  setExceptionBusy('');
-                }
-              }}
             />
           </div>
+          {monitor || isSrc ? (
+            <Link to="/app/additions" className="btn-primary mt-3 inline-flex">Review and pay requests</Link>
+          ) : null}
         </section>
       )}
 

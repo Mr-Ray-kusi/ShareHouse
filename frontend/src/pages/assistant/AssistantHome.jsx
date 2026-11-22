@@ -63,6 +63,7 @@ export default function AssistantHome() {
   const [approvedQueue, setApprovedQueue] = useState([]);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const searchSeq = useRef(0);
+  const lastSearchTerm = useRef('');
   const pendingWalkInIds = useRef(new Set());
 
   function exceptionAsStudent(row) {
@@ -115,7 +116,9 @@ export default function AssistantHome() {
       for (const row of items) {
         if (row.status === 'approved' && prevPending.has(row.id)) rememberApproved(row);
       }
-      pendingWalkInIds.current = new Set(items.filter((row) => row.status === 'pending').map((row) => row.id));
+      pendingWalkInIds.current = new Set(
+        items.filter((row) => ['pending', 'payment_pending'].includes(row.status)).map((row) => row.id)
+      );
       setWalkIns(items);
     } catch (_err) {
       /* keep last list when offline */
@@ -137,8 +140,14 @@ export default function AssistantHome() {
       if (row.status === 'approved' && mine) {
         pendingWalkInIds.current.delete(row.id);
         rememberApproved(row);
-        hydratePackIfNeeded().catch(() => {});
-      } else if (row.status === 'pending' && mine) {
+        hydratePackIfNeeded()
+          .then(() => {
+            const term = lastSearchTerm.current.trim();
+            if (term.length >= 2) return runSearch(term);
+            return undefined;
+          })
+          .catch((err) => setError(err.response?.data?.message || 'The student was added, but the list could not refresh.'));
+      } else if (['pending', 'payment_pending'].includes(row.status) && mine) {
         pendingWalkInIds.current.add(row.id);
       } else {
         pendingWalkInIds.current.delete(row.id);
@@ -194,10 +203,12 @@ export default function AssistantHome() {
     const needle = String(term || '').trim();
     setError('');
     if (needle.length < 2) {
+      lastSearchTerm.current = '';
       setList([]);
       setSearched(false);
       return;
     }
+    lastSearchTerm.current = needle;
     const seq = ++searchSeq.current;
     setLoading(true);
     try {
@@ -411,7 +422,7 @@ export default function AssistantHome() {
 
   const walkInCols = formSheetHeaders(headers, populatedHeaders);
   const walkInRequired = requiredSheetHeaders(walkInCols, walkInCols);
-  const pendingWalkIns = walkIns.filter((row) => row.status === 'pending');
+  const pendingWalkIns = walkIns.filter((row) => ['pending', 'payment_pending'].includes(row.status));
   const approvedWalkIns = walkIns.filter((row) => row.status === 'approved');
   const noticeCount = approvedWalkIns.length + pendingWalkIns.length + queue.marks + queue.exceptions;
   const noticeLabel = `${
@@ -576,9 +587,9 @@ export default function AssistantHome() {
       />
 
       {walkInOpen ? (
-        <Modal wide title="Walk-in request" onClose={walkBusy ? undefined : () => { setWalkInOpen(false); setWalkInPhoto(null); }}>
+        <Modal wide title="Student addition request" onClose={walkBusy ? undefined : () => { setWalkInOpen(false); setWalkInPhoto(null); }}>
           <p className="text-sm text-ink/70">
-            Fill the same columns as the student list. The SRC administrator must approve this request before the student can be verified.
+            Fill the same columns as the student list.             The SRC administrator must pay for this request before the student is added to the hall list and can be verified.
           </p>
           <form className="mt-4 space-y-3" onSubmit={submitWalkIn}>
             {walkInCols.length ? walkInCols.map((header) => (
@@ -605,7 +616,7 @@ export default function AssistantHome() {
             />
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button type="button" className="btn-ghost" disabled={walkBusy} onClick={() => { setWalkInOpen(false); setWalkInPhoto(null); }}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={walkBusy || !walkInCols.length}>{walkBusy ? 'Sending…' : 'Send for approval'}</button>
+              <button type="submit" className="btn-primary" disabled={walkBusy || !walkInCols.length}>{walkBusy ? 'Sending…' : 'Send to SRC'}</button>
             </div>
           </form>
         </Modal>

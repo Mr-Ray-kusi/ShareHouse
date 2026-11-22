@@ -15,6 +15,10 @@ import {
 } from '../services/paystackService.js';
 import { getSb } from '../db/supabase.js';
 import { dbError } from '../db/model.js';
+import {
+  applyExceptionPayment,
+  releaseFailedExceptionPayment,
+} from './exceptionPaymentController.js';
 
 function campaignBillingDbError(error) {
   const missingBillingSchema = (
@@ -264,7 +268,21 @@ export const verify = asyncHandler(async (req, res) => {
   const data = await verifyPayment(reference);
   if (data.status !== 'success') {
     track({ pillar: 'health', name: 'paystack_fail', message: data.status || 'failed' });
-    return res.status(400).json({ message: 'Payment was not successful.' });
+    await releaseFailedExceptionPayment(data, reference, req.app.get('io'));
+    return res.status(400).json({
+      message: ['failed', 'abandoned'].includes(data.status)
+        ? 'Payment was not successful. You can try again from Student additions.'
+        : 'Payment has not been confirmed yet. Wait a moment and retry verification.',
+    });
+  }
+
+  const additionDistribution = await applyExceptionPayment(data, reference, req.app.get('io'));
+  if (additionDistribution) {
+    return res.json({
+      paymentType: 'student_additions',
+      message: 'Payment confirmed. The new students have been added to the active campaign.',
+      distribution: additionDistribution,
+    });
   }
 
   const distribution = await applyCampaignPayment(data, reference);
@@ -291,7 +309,9 @@ export const webhook = asyncHandler(async (req, res) => {
   const event = req.body;
   if (event?.event === 'charge.success') {
     const data = event.data || {};
-    const distribution = await applyCampaignPayment(data, String(data.reference || ''));
+    const reference = String(data.reference || '');
+    const additionDistribution = await applyExceptionPayment(data, reference, req.app.get('io'));
+    const distribution = additionDistribution || await applyCampaignPayment(data, reference);
     if (distribution) {
       const io = req.app.get('io');
       io?.to(`tenant:${distribution.tenantId}`).emit('campaign:paid', {
