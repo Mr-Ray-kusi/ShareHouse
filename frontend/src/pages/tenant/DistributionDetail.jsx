@@ -35,7 +35,6 @@ export default function DistributionDetail() {
   const [filters, setFilters] = useState({});
   const [uploadMsg, setUploadMsg] = useState('');
   const [error, setError] = useState('');
-  const [paymentCheckoutUrl, setPaymentCheckoutUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -120,7 +119,6 @@ export default function DistributionDetail() {
   async function setStatus(status) {
     setBusy(true);
     setError('');
-    setPaymentCheckoutUrl('');
     try {
       if (status === 'active') {
         const { data } = await api.post(
@@ -132,7 +130,7 @@ export default function DistributionDetail() {
           data.payment?.authorization_url || data.distribution?.paymentUrl
         );
         if (checkoutUrl) {
-          setPaymentCheckoutUrl(checkoutUrl);
+          window.location.assign(checkoutUrl);
           return;
         }
         if (data.alreadyPaid) {
@@ -340,17 +338,6 @@ export default function DistributionDetail() {
       )}
       {uploadMsg && <p className="text-sm text-forest-700 mt-3">{uploadMsg}</p>}
       {error && <p className="text-sm text-red-700 mt-3">{error}</p>}
-      {paymentCheckoutUrl && (
-        <div className="mt-3 rounded-2xl border border-forest-700/15 bg-mist px-4 py-3" role="status">
-          <p className="text-sm text-ink/75">Your secure payment page is ready.</p>
-          <a
-            className="btn-primary mt-3 inline-flex"
-            href={paymentCheckoutUrl}
-          >
-            Continue to Paystack checkout
-          </a>
-        </div>
-      )}
 
       {pendingWalkIns.length > 0 && !supportMode && (
         <section className="mt-8">
