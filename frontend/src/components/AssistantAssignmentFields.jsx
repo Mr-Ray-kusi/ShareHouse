@@ -53,7 +53,9 @@ export default function AssistantAssignmentFields({
         <option value="">Whole list</option>
         {column && !headers.includes(column) ? <option value={column}>{column}</option> : null}
         {columns.map((row) => (
-          <option key={row.header} value={row.header}>{row.header}</option>
+          <option key={row.header} value={row.header} disabled={row.disabled}>
+            {row.header}{row.disabled ? ' (not an allocation group)' : ''}
+          </option>
         ))}
       </select>
       {column ? (

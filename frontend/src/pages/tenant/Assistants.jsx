@@ -14,19 +14,17 @@ function assignmentColumnsFromRoster(headers, beneficiaries) {
     'full name', 'student name', 'name', 'first name', 'last name', 'surname',
     'phone', 'phone number', 'mobile', 'email', 'contact',
   ];
-  const isIdentity = (header) => {
-    const key = String(header).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    return identityHeaders.some((identity) => key === identity || key.startsWith(`${identity} `));
-  };
-  let candidates = headers.filter((header) => header && !isIdentity(header));
-  if (!candidates.length) {
-    const level = headers.find((header) => String(header).toLowerCase().trim() === 'level');
-    if (level) candidates = [level];
-  }
-  return candidates.map((header) => ({
+  const normalize = (value) => String(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return headers.filter(Boolean).map((header) => ({
     header,
+    disabled: identityHeaders.some((identity) => (
+      normalize(header) === identity || normalize(header).startsWith(`${identity} `)
+    )),
     values: [...new Set(beneficiaries
-      .map((row) => String(row.sheetRow?.[header] || '').trim())
+      .map((row) => {
+        const key = Object.keys(row.sheetRow || {}).find((item) => normalize(item) === normalize(header));
+        return String(key ? row.sheetRow[key] : '').trim();
+      })
       .filter(Boolean))]
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
       .slice(0, 60),
@@ -67,32 +65,44 @@ export default function Assistants() {
 
   async function load(preferredHallId = '') {
     setError('');
-    const [{ data }, { data: options }, { data: hallData }, { data: distributionData }] = await Promise.all([
+    setRosterError('');
+    const [inviteResult, hallResult, distributionResult] = await Promise.allSettled([
       api.get('/api/invites'),
-      api.get('/api/invites/assignment-options'),
       api.get('/api/invites/halls'),
       api.get('/api/distributions'),
     ]);
-    setInvites(data.invites || []);
-    setJoinUrl(data.joinUrl || '');
-    setJoinPath(data.joinPath || '');
-    const columns = (options.columns || []).filter((column) => column.values?.length);
-    const distributions = distributionData.distributions || [];
+    if (inviteResult.status === 'fulfilled') {
+      const { data } = inviteResult.value;
+      setInvites(data.invites || []);
+      setJoinUrl(data.joinUrl || '');
+      setJoinPath(data.joinPath || '');
+    } else {
+      setError(inviteResult.reason.response?.data?.message || 'Could not load assistants.');
+    }
+
+    if (hallResult.status === 'fulfilled') {
+      setHalls(hallResult.value.data.halls || []);
+    } else {
+      setError(hallResult.reason.response?.data?.message || 'Could not load hall allocations.');
+    }
+
+    if (distributionResult.status !== 'fulfilled') {
+      setRosterError(distributionResult.reason.response?.data?.message || 'Could not load the active student list.');
+      return;
+    }
+
+    const distributions = distributionResult.value.data.distributions || [];
     const currentDistribution = distributions.find((distribution) => distribution.status === 'active')
       || distributions[0];
-    setAssignmentDistributionId(options.distribution?.id || currentDistribution?._id || '');
-    const selectedColumn = columns.find((column) => (
-      column.header === assignColumn && column.values?.length
-    ))
-      || columns.find((column) => /hall/i.test(column.header) && column.values?.length)
-      || columns.find((column) => column.values?.length);
-    setAssignColumns(columns);
-    setAssignColumn(selectedColumn?.header || '');
-    setAssignValues((current) => selectedColumn
-      ? current.filter((value) => selectedColumn.values.includes(value)).slice(0, 1)
-      : []);
-    const nextHalls = hallData.halls || [];
-    setHalls(nextHalls);
+    const nextDistributionId = currentDistribution?._id || '';
+    if (nextDistributionId !== assignmentDistributionId) {
+      setAssignColumns([]);
+      setAssignColumn('');
+      setAssignValues([]);
+      setRoster({ distributionId: '', headers: [], beneficiaries: [] });
+    }
+    setAssignmentDistributionId(nextDistributionId);
+    const nextHalls = hallResult.status === 'fulfilled' ? hallResult.value.data.halls || [] : [];
     setHallId((current) => (
       nextHalls.some((hall) => hall._id === preferredHallId)
         ? preferredHallId
@@ -123,9 +133,20 @@ export default function Assistants() {
     api.get(`/api/distributions/${assignmentDistributionId}/beneficiaries`)
       .then(({ data }) => {
         if (active) {
+          const headers = [...(data.headers || [])];
+          const knownHeaders = new Set(headers.map((header) => String(header).toLowerCase().trim()));
+          for (const beneficiary of data.beneficiaries || []) {
+            for (const header of Object.keys(beneficiary.sheetRow || {})) {
+              const key = header.toLowerCase().trim();
+              if (!knownHeaders.has(key)) {
+                headers.push(header);
+                knownHeaders.add(key);
+              }
+            }
+          }
           setRoster({
             distributionId: assignmentDistributionId,
-            headers: data.headers || [],
+            headers,
             beneficiaries: data.beneficiaries || [],
           });
         }
@@ -149,8 +170,8 @@ export default function Assistants() {
       || !roster.headers.length
     ) return;
     const columns = assignmentColumnsFromRoster(roster.headers, roster.beneficiaries);
-    const selected = columns.find((column) => /hall/i.test(column.header) && column.values.length)
-      || columns.find((column) => column.values.length);
+    const selected = columns.find((column) => !column.disabled && /hall/i.test(column.header) && column.values.length)
+      || columns.find((column) => !column.disabled && column.values.length);
     setAssignColumns(columns);
     setAssignColumn(selected?.header || '');
     setAssignValues([]);
