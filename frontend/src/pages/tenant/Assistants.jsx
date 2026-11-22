@@ -26,6 +26,10 @@ export default function Assistants() {
   const [openId, setOpenId] = useState('');
   const [verified, setVerified] = useState({ headers: [], results: [] });
   const [loadingList, setLoadingList] = useState(false);
+  const [assignmentDistributionId, setAssignmentDistributionId] = useState('');
+  const [roster, setRoster] = useState({ headers: [], beneficiaries: [] });
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterError, setRosterError] = useState('');
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState('asc');
   const [copiedId, setCopiedId] = useState('');
@@ -47,6 +51,7 @@ export default function Assistants() {
     setJoinUrl(data.joinUrl || '');
     setJoinPath(data.joinPath || '');
     const columns = options.columns || [];
+    setAssignmentDistributionId(options.distribution?.id || '');
     const selectedColumn = columns.find((column) => (
       column.header === assignColumn && column.values?.length
     ))
@@ -72,6 +77,40 @@ export default function Assistants() {
     if (pathname !== '/app/assistants') return;
     load().catch((err) => setError(err.response?.data?.message || 'Could not load assistants.'));
   }, [pathname, tenant?.tenantId]);
+
+  useEffect(() => {
+    let active = true;
+    if (!assignmentDistributionId) {
+      setRoster({ headers: [], beneficiaries: [] });
+      setRosterLoading(false);
+      setRosterError('');
+      return () => {
+        active = false;
+      };
+    }
+
+    setRosterLoading(true);
+    setRosterError('');
+    api.get(`/api/distributions/${assignmentDistributionId}/beneficiaries`)
+      .then(({ data }) => {
+        if (active) {
+          setRoster({
+            headers: data.headers || [],
+            beneficiaries: data.beneficiaries || [],
+          });
+        }
+      })
+      .catch((err) => {
+        if (active) setRosterError(err.response?.data?.message || 'Could not load the current student list.');
+      })
+      .finally(() => {
+        if (active) setRosterLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [assignmentDistributionId]);
 
   async function loadVerified(id) {
     setLoadingList(true);
@@ -174,9 +213,13 @@ export default function Assistants() {
           assignmentValues: assignValues,
         } : {}),
       });
+      setHalls((current) => [
+        ...current.filter((hall) => hall._id !== data.hall._id),
+        data.hall,
+      ].sort((a, b) => a.name.localeCompare(b.name)));
+      setHallId(data.hall._id);
       setHallName('');
       setAssignValues([]);
-      await load(data.hall._id);
     } catch (err) {
       setError(err.response?.data?.message || 'Could not create hall allocation.');
     } finally {
@@ -361,6 +404,25 @@ export default function Assistants() {
                 {busy ? 'Saving…' : 'Create hall allocation'}
               </button>
             </form>
+            <div className="pt-2">
+              <h3 className="font-semibold">Current student list</h3>
+              <p className="text-sm text-ink/60 mt-1">
+                Use the list headers above to assign a hall to a specific group, or choose Whole list to include everyone.
+              </p>
+              {rosterError && <p className="text-sm text-red-700 mt-2">{rosterError}</p>}
+              <div className="mt-3 max-h-[28rem] overflow-auto">
+                <SheetTable
+                  headers={roster.headers}
+                  rows={roster.beneficiaries}
+                  emptyMessage={rosterLoading
+                    ? 'Loading the current student list…'
+                    : assignmentDistributionId
+                      ? 'No students are on the current list yet.'
+                      : 'No student list is available. Upload a list to see its headers and assign halls.'}
+                />
+              </div>
+              {rosterLoading && <p className="text-xs text-ink/60 mt-2">Loading student list…</p>}
+            </div>
           </section>
 
           <form onSubmit={create} className="card p-5 mt-4 space-y-3">
