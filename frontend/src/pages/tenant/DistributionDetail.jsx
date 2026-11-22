@@ -124,11 +124,10 @@ export default function DistributionDetail() {
     let checkoutWindow = null;
     try {
       if (status === 'active') {
-        checkoutWindow = window.open('about:blank', '_blank');
-        if (checkoutWindow) {
-          checkoutWindow.opener = null;
-          checkoutWindow.document.title = 'Preparing secure payment';
-          checkoutWindow.document.body.textContent = 'Connecting to Paystack…';
+        try {
+          checkoutWindow = window.open('about:blank', '_blank');
+        } catch (_popupError) {
+          checkoutWindow = null;
         }
         const { data } = await api.post(`/api/payments/distributions/${id}/initialize`);
         const checkoutUrl = getPaystackCheckoutUrl(
@@ -136,9 +135,16 @@ export default function DistributionDetail() {
         );
         if (checkoutUrl) {
           setPaymentCheckoutUrl(checkoutUrl);
+          let checkoutStarted = false;
           if (checkoutWindow && !checkoutWindow.closed) {
-            checkoutWindow.location.replace(checkoutUrl);
-          } else {
+            try {
+              checkoutWindow.location.replace(checkoutUrl);
+              checkoutStarted = true;
+            } catch (_navigationError) {
+              checkoutWindow.close();
+            }
+          }
+          if (!checkoutStarted) {
             window.location.assign(checkoutUrl);
           }
           return;
