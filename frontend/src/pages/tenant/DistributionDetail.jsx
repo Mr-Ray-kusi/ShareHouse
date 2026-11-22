@@ -36,6 +36,7 @@ export default function DistributionDetail() {
   const [uploadMsg, setUploadMsg] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [editor, setEditor] = useState(null);
@@ -117,7 +118,9 @@ export default function DistributionDetail() {
   }
 
   async function setStatus(status) {
-    setBusy(true);
+    const startingPayment = status === 'active';
+    setBusy(!startingPayment);
+    setPaymentLoading(startingPayment);
     setError('');
     try {
       if (status === 'active') {
@@ -147,6 +150,7 @@ export default function DistributionDetail() {
       setError(err.response?.data?.message || err.message || 'Could not update status.');
     } finally {
       setBusy(false);
+      setPaymentLoading(false);
     }
   }
 
@@ -299,13 +303,27 @@ export default function DistributionDetail() {
           {dist.status === 'active' ? (
             <button className="btn-ghost" disabled={busy} onClick={() => setStatus('completed')}>Mark completed</button>
           ) : (
-            <button className="btn-primary" disabled={busy} onClick={() => setStatus('active')}>
-              {busy
-                ? 'Preparing…'
-                : paymentMatchesList
+            <div className="flex min-w-48 flex-col gap-1.5">
+              <button
+                className="btn-primary"
+                disabled={busy || paymentLoading}
+                aria-busy={paymentLoading}
+                onClick={() => setStatus('active')}
+              >
+                {paymentMatchesList
                   ? 'Activate paid campaign'
                   : `Pay GHS ${(campaignAmountPesewas / 100).toFixed(2)} and activate`}
-            </button>
+              </button>
+              {paymentLoading && (
+                <div
+                  className="h-1.5 w-full overflow-hidden rounded-full bg-amber-100"
+                  role="progressbar"
+                  aria-label="Loading payment page"
+                >
+                  <div className="h-full w-2/3 animate-pulse rounded-full bg-amber-400" />
+                </div>
+              )}
+            </div>
           )}
           <label className="btn-gold cursor-pointer text-center">
             {busy ? 'Reading…' : 'Update Excel list'}
