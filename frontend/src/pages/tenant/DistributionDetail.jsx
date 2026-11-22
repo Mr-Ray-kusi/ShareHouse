@@ -121,18 +121,30 @@ export default function DistributionDetail() {
     setBusy(true);
     setError('');
     setPaymentCheckoutUrl('');
+    let checkoutWindow = null;
     try {
       if (status === 'active') {
+        checkoutWindow = window.open('about:blank', '_blank');
+        if (checkoutWindow) {
+          checkoutWindow.opener = null;
+          checkoutWindow.document.title = 'Preparing secure payment';
+          checkoutWindow.document.body.textContent = 'Connecting to Paystack…';
+        }
         const { data } = await api.post(`/api/payments/distributions/${id}/initialize`);
         const checkoutUrl = getPaystackCheckoutUrl(
           data.payment?.authorization_url || data.distribution?.paymentUrl
         );
         if (checkoutUrl) {
           setPaymentCheckoutUrl(checkoutUrl);
-          window.location.assign(checkoutUrl);
+          if (checkoutWindow && !checkoutWindow.closed) {
+            checkoutWindow.location.replace(checkoutUrl);
+          } else {
+            window.location.assign(checkoutUrl);
+          }
           return;
         }
         if (data.alreadyPaid) {
+          checkoutWindow?.close();
           const { data: activeData } = await api.patch(`/api/distributions/${id}/status`, { status });
           setDist(activeData.distribution);
           return;
@@ -143,6 +155,7 @@ export default function DistributionDetail() {
       const { data } = await api.patch(`/api/distributions/${id}/status`, { status });
       setDist(data.distribution);
     } catch (err) {
+      checkoutWindow?.close();
       setError(err.response?.data?.message || err.message || 'Could not update status.');
     } finally {
       setBusy(false);
