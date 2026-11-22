@@ -88,6 +88,7 @@ export default function DistributionDetail() {
       form.append('confirmResetMarks', options.confirmResetMarks ? 'true' : 'false');
       const { data } = await api.post(`/api/distributions/${id}/beneficiaries`, form, { timeout: 60000 });
       setUploadMsg(`${data.message}${data.skipped?.length ? ` · ${data.skipped.length} rows skipped` : ''}`);
+      setDist(data.distribution);
       setPreview(null);
       setPendingFile(null);
       const rows = await load();
@@ -252,10 +253,12 @@ export default function DistributionDetail() {
   }, [list, filters, headers, needle]);
 
   const pendingWalkIns = exceptions.filter((row) => row.status === 'pending');
+  const studentCount = Number(dist?.beneficiaryCount) || 0;
+  const campaignAmountPesewas = studentCount * 5;
   const paymentMatchesList = (
     dist?.paymentStatus === 'paid'
-    && dist.paymentStudentCount === dist.beneficiaryCount
-    && dist.paymentAmount === dist.beneficiaryCount * 5
+    && dist.paymentStudentCount === studentCount
+    && dist.paymentAmount === campaignAmountPesewas
   );
 
   if (!dist) return <p className="text-ink/60">{error || 'Loading…'}</p>;
@@ -278,7 +281,7 @@ export default function DistributionDetail() {
                 ? 'Preparing…'
                 : paymentMatchesList
                   ? 'Activate paid campaign'
-                  : `Pay GHS ${(dist.beneficiaryCount * 0.05).toFixed(2)} and activate`}
+                  : `Pay GHS ${(campaignAmountPesewas / 100).toFixed(2)} and activate`}
             </button>
           )}
           <label className="btn-gold cursor-pointer text-center">
@@ -296,11 +299,19 @@ export default function DistributionDetail() {
         </div>
       )}
       {!supportMode && dist.status !== 'active' && (
-        <p className="mt-2 text-sm text-ink/60">
-          {paymentMatchesList
-            ? `Payment is confirmed for all ${dist.beneficiaryCount} students on this campaign.`
-            : `Campaign activation costs GHS 0.05 per student on the list (${dist.beneficiaryCount} students). Payment is required only when you activate the campaign.`}
-        </p>
+        <div className="mt-3 rounded-2xl border border-forest-700/15 bg-white px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-forest-700/70">
+            {paymentMatchesList ? 'Campaign payment' : 'Amount to pay when activating'}
+          </p>
+          <p className="mt-1 font-display text-2xl text-forest-900">
+            GHS {(campaignAmountPesewas / 100).toFixed(2)}
+          </p>
+          <p className="mt-1 text-sm text-ink/60">
+            {paymentMatchesList
+              ? `Payment is confirmed for all ${studentCount} students on this campaign.`
+              : `${studentCount} students × GHS 0.05 each. Payment is required only when you activate the campaign.`}
+          </p>
+        </div>
       )}
       {uploadMsg && <p className="text-sm text-forest-700 mt-3">{uploadMsg}</p>}
       {error && <p className="text-sm text-red-700 mt-3">{error}</p>}
