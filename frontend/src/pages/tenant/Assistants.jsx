@@ -8,6 +8,31 @@ import { downloadCsv, printSheet, sortSheetRows } from '../../utils/sheetExport'
 import HallHero from '../../components/HallHero';
 import AssistantAssignmentFields, { assignmentSummary } from '../../components/AssistantAssignmentFields';
 
+function assignmentColumnsFromRoster(headers, beneficiaries) {
+  const identityHeaders = [
+    'student index', 'index number', 'index no', 'index', 'matric', 'student id',
+    'full name', 'student name', 'name', 'first name', 'last name', 'surname',
+    'phone', 'phone number', 'mobile', 'email', 'contact',
+  ];
+  const isIdentity = (header) => {
+    const key = String(header).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    return identityHeaders.some((identity) => key === identity || key.startsWith(`${identity} `));
+  };
+  let candidates = headers.filter((header) => header && !isIdentity(header));
+  if (!candidates.length) {
+    const level = headers.find((header) => String(header).toLowerCase().trim() === 'level');
+    if (level) candidates = [level];
+  }
+  return candidates.map((header) => ({
+    header,
+    values: [...new Set(beneficiaries
+      .map((row) => String(row.sheetRow?.[header] || '').trim())
+      .filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
+      .slice(0, 60),
+  }));
+}
+
 export default function Assistants() {
   const { tenant, supportMode } = useAuth();
   const { pathname } = useLocation();
@@ -42,16 +67,20 @@ export default function Assistants() {
 
   async function load(preferredHallId = '') {
     setError('');
-    const [{ data }, { data: options }, { data: hallData }] = await Promise.all([
+    const [{ data }, { data: options }, { data: hallData }, { data: distributionData }] = await Promise.all([
       api.get('/api/invites'),
       api.get('/api/invites/assignment-options'),
       api.get('/api/invites/halls'),
+      api.get('/api/distributions'),
     ]);
     setInvites(data.invites || []);
     setJoinUrl(data.joinUrl || '');
     setJoinPath(data.joinPath || '');
     const columns = options.columns || [];
-    setAssignmentDistributionId(options.distribution?.id || '');
+    const distributions = distributionData.distributions || [];
+    const currentDistribution = distributions.find((distribution) => distribution.status === 'active')
+      || distributions[0];
+    setAssignmentDistributionId(options.distribution?.id || currentDistribution?._id || '');
     const selectedColumn = columns.find((column) => (
       column.header === assignColumn && column.values?.length
     ))
@@ -111,6 +140,16 @@ export default function Assistants() {
       active = false;
     };
   }, [assignmentDistributionId]);
+
+  useEffect(() => {
+    if (assignColumns.length || !roster.headers.length) return;
+    const columns = assignmentColumnsFromRoster(roster.headers, roster.beneficiaries);
+    const selected = columns.find((column) => /hall/i.test(column.header) && column.values.length)
+      || columns.find((column) => column.values.length);
+    setAssignColumns(columns);
+    setAssignColumn(selected?.header || '');
+    setAssignValues([]);
+  }, [assignColumns.length, roster]);
 
   async function loadVerified(id) {
     setLoadingList(true);
