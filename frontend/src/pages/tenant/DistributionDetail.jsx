@@ -121,36 +121,17 @@ export default function DistributionDetail() {
     setBusy(true);
     setError('');
     setPaymentCheckoutUrl('');
-    let checkoutWindow = null;
     try {
       if (status === 'active') {
-        try {
-          checkoutWindow = window.open('about:blank', '_blank');
-        } catch (_popupError) {
-          checkoutWindow = null;
-        }
         const { data } = await api.post(`/api/payments/distributions/${id}/initialize`);
         const checkoutUrl = getPaystackCheckoutUrl(
           data.payment?.authorization_url || data.distribution?.paymentUrl
         );
         if (checkoutUrl) {
           setPaymentCheckoutUrl(checkoutUrl);
-          let checkoutStarted = false;
-          if (checkoutWindow && !checkoutWindow.closed) {
-            try {
-              checkoutWindow.location.replace(checkoutUrl);
-              checkoutStarted = true;
-            } catch (_navigationError) {
-              checkoutWindow.close();
-            }
-          }
-          if (!checkoutStarted) {
-            window.location.assign(checkoutUrl);
-          }
           return;
         }
         if (data.alreadyPaid) {
-          checkoutWindow?.close();
           const { data: activeData } = await api.patch(`/api/distributions/${id}/status`, { status });
           setDist(activeData.distribution);
           return;
@@ -161,7 +142,6 @@ export default function DistributionDetail() {
       const { data } = await api.patch(`/api/distributions/${id}/status`, { status });
       setDist(data.distribution);
     } catch (err) {
-      checkoutWindow?.close();
       setError(err.response?.data?.message || err.message || 'Could not update status.');
     } finally {
       setBusy(false);
@@ -362,8 +342,6 @@ export default function DistributionDetail() {
           <a
             className="btn-primary mt-3 inline-flex"
             href={paymentCheckoutUrl}
-            target="_blank"
-            rel="noopener noreferrer"
           >
             Continue to Paystack checkout
           </a>

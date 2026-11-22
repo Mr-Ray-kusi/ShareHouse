@@ -10,15 +10,26 @@ async function paystackFetch(path, { method = 'GET', body } = {}) {
     throw err;
   }
 
-  const res = await fetch(`${PAYSTACK_BASE}${path}`, {
-    method,
-    signal: AbortSignal.timeout(20_000),
-    headers: {
+  let res;
+  try {
+    res = await fetch(`${PAYSTACK_BASE}${path}`, {
+      method,
+      signal: AbortSignal.timeout(20_000),
+      headers: {
       Authorization: `Bearer ${env.paystackSecret}`,
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+        'Content-Type': 'application/json',
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (cause) {
+    const err = new Error(
+      cause?.name === 'TimeoutError' || cause?.name === 'AbortError'
+        ? 'Paystack did not respond in time. Please try again.'
+        : 'Could not connect to Paystack. Please try again.'
+    );
+    err.status = 503;
+    throw err;
+  }
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.status === false) {
@@ -60,7 +71,24 @@ export async function initializePayment({
     },
   };
   const data = await paystackFetch('/transaction/initialize', { method: 'POST', body: payload });
-  return data.data;
+  const payment = data.data;
+  let checkoutUrl;
+  try {
+    checkoutUrl = new URL(payment?.authorization_url);
+  } catch {
+    checkoutUrl = null;
+  }
+  if (
+    !payment?.reference
+    || !checkoutUrl
+    || checkoutUrl.protocol !== 'https:'
+    || (checkoutUrl.hostname !== 'paystack.com' && !checkoutUrl.hostname.endsWith('.paystack.com'))
+  ) {
+    const err = new Error('Paystack did not return a valid checkout link. Check the Paystack account configuration and try again.');
+    err.status = 502;
+    throw err;
+  }
+  return payment;
 }
 
 export async function verifyPayment(reference) {
