@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 export function assignmentSummary(invite) {
   const column = String(invite?.assignmentColumn || '').trim();
+  if (column === '__whole_list__') return 'Whole list';
   const values = Array.isArray(invite?.assignmentValues) ? invite.assignmentValues.filter(Boolean) : [];
   if (!column || !values.length) return 'Whole list';
   return `${column}: ${values.join(', ')}`;

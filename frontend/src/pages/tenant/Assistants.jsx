@@ -51,8 +51,7 @@ export default function Assistants() {
       column.header === assignColumn && column.values?.length
     ))
       || columns.find((column) => /hall/i.test(column.header) && column.values?.length)
-      || columns.find((column) => column.values?.length)
-      || columns[0];
+      || columns.find((column) => column.values?.length);
     setAssignColumns(columns);
     setAssignColumn(selectedColumn?.header || '');
     setAssignValues((current) => selectedColumn
@@ -163,14 +162,17 @@ export default function Assistants() {
     setBusy(true);
     setError('');
     try {
-      if (!hallName.trim() || !assignColumn || assignValues.length !== 1) {
-        setError('Enter a hall name and choose exactly one hall value from the student list.');
+      if (!hallName.trim() || (assignColumn && assignValues.length !== 1)) {
+        setError('Enter a hall name and choose one hall value, or select Whole list.');
         return;
       }
       const { data } = await api.post('/api/invites/halls', {
         name: hallName.trim(),
-        assignmentColumn: assignColumn,
-        assignmentValues: assignValues,
+        wholeList: !assignColumn,
+        ...(assignColumn ? {
+          assignmentColumn: assignColumn,
+          assignmentValues: assignValues,
+        } : {}),
       });
       setHallName('');
       setAssignValues([]);
@@ -316,7 +318,11 @@ export default function Assistants() {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="font-semibold">{hall.name}</p>
-                        <p className="text-xs text-ink/60">{hall.assignmentColumn}: {hall.assignmentValue}</p>
+                        <p className="text-xs text-ink/60">
+                          {hall.assignmentColumn === '__whole_list__'
+                            ? 'Whole student list'
+                            : `${hall.assignmentColumn}: ${hall.assignmentValue}`}
+                        </p>
                         <p className={`mt-1 text-xs ${hall.assistants.active >= 2 ? 'text-forest-700' : 'text-amber-800'}`}>
                           {hall.assistants.active} active assistant{hall.assistants.active === 1 ? '' : 's'} · minimum 2
                         </p>
@@ -351,7 +357,7 @@ export default function Assistants() {
                 columnLabel="Student-list column"
                 valueLabel="Hall value"
               />
-              <button className="btn-primary" disabled={busy || !assignColumn || assignValues.length !== 1}>
+              <button className="btn-primary" disabled={busy || (assignColumn && assignValues.length !== 1)}>
                 {busy ? 'Saving…' : 'Create hall allocation'}
               </button>
             </form>

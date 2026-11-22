@@ -8,6 +8,9 @@ const IDENTITY_HEADERS = [
   'phone', 'phone number', 'mobile', 'email', 'contact',
 ];
 
+export const WHOLE_LIST_COLUMN = '__whole_list__';
+export const WHOLE_LIST_VALUE = '*';
+
 function headerKey(value) {
   return foldSearch(value).replace(/[^a-z0-9]+/g, ' ').trim();
 }
@@ -25,6 +28,7 @@ export function presentAssignment(row) {
 }
 
 export function formatAssignment(row) {
+  if (row?.assignmentColumn === WHOLE_LIST_COLUMN) return 'Whole list';
   const assignment = presentAssignment(row);
   if (!assignment) return 'Whole list';
   return `${assignment.column}: ${assignment.values.join(', ')}`;
@@ -100,6 +104,7 @@ function valueMatches(cell, want) {
 }
 
 export function beneficiaryMatchesAssignment(beneficiary, assignment) {
+  if (assignment?.column === WHOLE_LIST_COLUMN) return true;
   const parsed = presentAssignment(assignment);
   if (!parsed) return true;
   const cell = sheetCell(beneficiary, parsed.column);

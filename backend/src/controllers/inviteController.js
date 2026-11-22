@@ -9,6 +9,8 @@ import {
   loadAssignmentOptions,
   parseAssignment,
   throwIfAssignmentSchema,
+  WHOLE_LIST_COLUMN,
+  WHOLE_LIST_VALUE,
 } from '../services/assistantAssignment.js';
 
 export async function ensureJoinCode(tenant) {
@@ -111,6 +113,23 @@ export const createHallAllocation = asyncHandler(async (req, res) => {
   if (!name || name.length > 80) {
     return res.status(400).json({ message: 'Hall name is required and must be 80 characters or fewer.' });
   }
+  if (req.body?.wholeList === true) {
+    const existing = await HallAllocation.findOne({ tenantId: req.tenantId });
+    if (existing) {
+      return res.status(409).json({
+        message: 'A whole-list hall must be the only hall allocation. Remove existing hall allocations first.',
+      });
+    }
+    const hall = await HallAllocation.create({
+      tenantId: req.tenantId,
+      name,
+      assignmentColumn: WHOLE_LIST_COLUMN,
+      assignmentValue: WHOLE_LIST_VALUE,
+      createdBy: req.user._id,
+    });
+    return res.status(201).json({ hall: { ...hall.toObject(), assistants: { total: 0, active: 0 } } });
+  }
+
   const assignment = parseAssignment(req.body);
   if (!assignment.assignmentColumn || assignment.assignmentValues.length !== 1) {
     return res.status(400).json({ message: 'Choose one hall value from the uploaded student list.' });
@@ -119,6 +138,15 @@ export const createHallAllocation = asyncHandler(async (req, res) => {
   const column = options.columns.find((item) => item.header === assignment.assignmentColumn);
   if (!column || !column.values.some((value) => value === assignment.assignmentValues[0])) {
     return res.status(400).json({ message: 'Choose a hall column and value present in the current student list.' });
+  }
+  const wholeListHall = await HallAllocation.findOne({
+    tenantId: req.tenantId,
+    assignmentColumn: WHOLE_LIST_COLUMN,
+  });
+  if (wholeListHall) {
+    return res.status(409).json({
+      message: `The whole student list is already allocated to ${wholeListHall.name}. Remove it before creating another hall allocation.`,
+    });
   }
   const existingHall = await HallAllocation.findOne({
     tenantId: req.tenantId,
