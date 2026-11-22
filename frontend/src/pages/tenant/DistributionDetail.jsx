@@ -10,6 +10,18 @@ import UploadPreviewModal from '../../components/UploadPreviewModal';
 import StudentEditor from '../../components/StudentEditor';
 import ExceptionPanel, { reviewWalkIn } from '../../components/ExceptionPanel';
 
+function getPaystackCheckoutUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'https:' && (url.hostname === 'paystack.com' || url.hostname.endsWith('.paystack.com'))) {
+      return url.href;
+    }
+  } catch {
+    return '';
+  }
+  return '';
+}
+
 export default function DistributionDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -23,6 +35,7 @@ export default function DistributionDetail() {
   const [filters, setFilters] = useState({});
   const [uploadMsg, setUploadMsg] = useState('');
   const [error, setError] = useState('');
+  const [paymentCheckoutUrl, setPaymentCheckoutUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -107,37 +120,30 @@ export default function DistributionDetail() {
   async function setStatus(status) {
     setBusy(true);
     setError('');
+    setPaymentCheckoutUrl('');
     try {
+      if (status === 'active') {
+        const { data } = await api.post(`/api/payments/distributions/${id}/initialize`);
+        const checkoutUrl = getPaystackCheckoutUrl(
+          data.payment?.authorization_url || data.distribution?.paymentUrl
+        );
+        if (checkoutUrl) {
+          setPaymentCheckoutUrl(checkoutUrl);
+          window.location.assign(checkoutUrl);
+          return;
+        }
+        if (data.alreadyPaid) {
+          const { data: activeData } = await api.patch(`/api/distributions/${id}/status`, { status });
+          setDist(activeData.distribution);
+          return;
+        }
+        throw new Error('Payment was initialized, but Paystack did not return a valid checkout link. Please try again.');
+      }
+
       const { data } = await api.patch(`/api/distributions/${id}/status`, { status });
       setDist(data.distribution);
     } catch (err) {
-      if (status === 'active' && err.response?.data?.code === 'CAMPAIGN_PAYMENT_REQUIRED') {
-        if (Number.isInteger(err.response.data.studentCount)) {
-          setDist((current) => ({ ...current, beneficiaryCount: err.response.data.studentCount }));
-          setBilling({
-            studentCount: err.response.data.studentCount,
-            ratePesewas: err.response.data.ratePesewas,
-            amountPesewas: err.response.data.amountPesewas,
-          });
-        }
-        try {
-          const { data } = await api.post(`/api/payments/distributions/${id}/initialize`);
-          if (data.payment?.authorization_url) {
-            window.location.assign(data.payment.authorization_url);
-            return;
-          }
-          if (data.alreadyPaid) {
-            const { data: activeData } = await api.patch(`/api/distributions/${id}/status`, { status: 'active' });
-            setDist(activeData.distribution);
-          } else if (data.distribution) {
-            setDist(data.distribution);
-          }
-        } catch (paymentError) {
-          setError(paymentError.response?.data?.message || 'Could not start campaign payment.');
-        }
-      } else {
-        setError(err.response?.data?.message || 'Could not update status.');
-      }
+      setError(err.response?.data?.message || err.message || 'Could not update status.');
     } finally {
       setBusy(false);
     }
@@ -331,6 +337,19 @@ export default function DistributionDetail() {
       )}
       {uploadMsg && <p className="text-sm text-forest-700 mt-3">{uploadMsg}</p>}
       {error && <p className="text-sm text-red-700 mt-3">{error}</p>}
+      {paymentCheckoutUrl && (
+        <div className="mt-3 rounded-2xl border border-forest-700/15 bg-mist px-4 py-3" role="status">
+          <p className="text-sm text-ink/75">Your secure payment page is ready.</p>
+          <a
+            className="btn-primary mt-3 inline-flex"
+            href={paymentCheckoutUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Continue to Paystack checkout
+          </a>
+        </div>
+      )}
 
       {pendingWalkIns.length > 0 && !supportMode && (
         <section className="mt-8">
