@@ -50,6 +50,19 @@ export function throwIfAssignmentSchema(err) {
   throw wrapped;
 }
 
+export function throwIfHallAllocationSchema(err) {
+  const text = `${err?.message || ''} ${err?.details || ''}`;
+  if (
+    !['42P01', 'PGRST204', 'PGRST205'].includes(err?.code)
+    && !/could not find the table .*hall_allocations/i.test(text)
+  ) return;
+  const wrapped = new Error(
+    'Hall allocations are not set up in the database. Run backend/supabase/hall-allocation.sql in the Supabase SQL Editor, then try again.'
+  );
+  wrapped.status = 503;
+  throw wrapped;
+}
+
 export function parseAssignment(body = {}) {
   const column = String(body.assignmentColumn || body.column || '').trim();
   let raw = body.assignmentValues ?? body.values ?? [];

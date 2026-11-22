@@ -8,10 +8,26 @@ import {
   disconnectUnstaffedHallAssistants,
   loadAssignmentOptions,
   parseAssignment,
+  throwIfHallAllocationSchema,
   throwIfAssignmentSchema,
   WHOLE_LIST_COLUMN,
   WHOLE_LIST_VALUE,
 } from '../services/assistantAssignment.js';
+
+async function withHallAllocationSchema(operation) {
+  try {
+    return await operation();
+  } catch (err) {
+    throwIfHallAllocationSchema(err);
+    throwIfAssignmentSchema(err);
+    if (err?.code === 11000) {
+      const conflict = new Error('A hall with this name or student group already exists. Choose a different name or group.');
+      conflict.status = 409;
+      throw conflict;
+    }
+    throw err;
+  }
+}
 
 export async function ensureJoinCode(tenant) {
   if (tenant.joinCode) return tenant.joinCode;
@@ -87,10 +103,10 @@ export const assignmentOptions = asyncHandler(async (req, res) => {
 });
 
 export const listHallAllocations = asyncHandler(async (req, res) => {
-  const [halls, invites] = await Promise.all([
+  const [halls, invites] = await withHallAllocationSchema(() => Promise.all([
     HallAllocation.find({ tenantId: req.tenantId }).sort({ name: 1 }),
     Invite.find({ tenantId: req.tenantId }).select('hallId isActive'),
-  ]);
+  ]));
   const counts = new Map();
   for (const invite of invites) {
     const hallId = String(invite.hallId || '');
@@ -113,20 +129,28 @@ export const createHallAllocation = asyncHandler(async (req, res) => {
   if (!name || name.length > 80) {
     return res.status(400).json({ message: 'Hall name is required and must be 80 characters or fewer.' });
   }
+  const existingName = await withHallAllocationSchema(
+    () => HallAllocation.findOne({ tenantId: req.tenantId, name })
+  );
+  if (existingName) {
+    return res.status(409).json({ message: `A hall allocation named ${existingName.name} already exists.` });
+  }
   if (req.body?.wholeList === true) {
-    const existing = await HallAllocation.findOne({ tenantId: req.tenantId });
+    const existing = await withHallAllocationSchema(
+      () => HallAllocation.findOne({ tenantId: req.tenantId })
+    );
     if (existing) {
       return res.status(409).json({
         message: 'A whole-list hall must be the only hall allocation. Remove existing hall allocations first.',
       });
     }
-    const hall = await HallAllocation.create({
+    const hall = await withHallAllocationSchema(() => HallAllocation.create({
       tenantId: req.tenantId,
       name,
       assignmentColumn: WHOLE_LIST_COLUMN,
       assignmentValue: WHOLE_LIST_VALUE,
       createdBy: req.user._id,
-    });
+    }));
     return res.status(201).json({ hall: { ...hall.toObject(), assistants: { total: 0, active: 0 } } });
   }
 
@@ -139,30 +163,30 @@ export const createHallAllocation = asyncHandler(async (req, res) => {
   if (!column || !column.values.some((value) => value === assignment.assignmentValues[0])) {
     return res.status(400).json({ message: 'Choose a hall column and value present in the current student list.' });
   }
-  const wholeListHall = await HallAllocation.findOne({
+  const wholeListHall = await withHallAllocationSchema(() => HallAllocation.findOne({
     tenantId: req.tenantId,
     assignmentColumn: WHOLE_LIST_COLUMN,
-  });
+  }));
   if (wholeListHall) {
     return res.status(409).json({
       message: `The whole student list is already allocated to ${wholeListHall.name}. Remove it before creating another hall allocation.`,
     });
   }
-  const existingHall = await HallAllocation.findOne({
+  const existingHall = await withHallAllocationSchema(() => HallAllocation.findOne({
     tenantId: req.tenantId,
     assignmentColumn: assignment.assignmentColumn,
     assignmentValue: assignment.assignmentValues[0],
-  });
+  }));
   if (existingHall) {
     return res.status(409).json({ message: `That student-list value is already allocated to ${existingHall.name}.` });
   }
-  const hall = await HallAllocation.create({
+  const hall = await withHallAllocationSchema(() => HallAllocation.create({
     tenantId: req.tenantId,
     name,
     assignmentColumn: assignment.assignmentColumn,
     assignmentValue: assignment.assignmentValues[0],
     createdBy: req.user._id,
-  });
+  }));
   res.status(201).json({ hall: { ...hall.toObject(), assistants: { total: 0, active: 0 } } });
 });
 
