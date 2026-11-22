@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Copy, Check, Download, Printer, Trash2 } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -9,6 +10,7 @@ import AssistantAssignmentFields, { assignmentSummary } from '../../components/A
 
 export default function Assistants() {
   const { tenant, supportMode } = useAuth();
+  const { pathname } = useLocation();
   const [invites, setInvites] = useState([]);
   const [halls, setHalls] = useState([]);
   const [joinUrl, setJoinUrl] = useState('');
@@ -34,27 +36,41 @@ export default function Assistants() {
   const [editId, setEditId] = useState('');
   const [editHallId, setEditHallId] = useState('');
 
-  async function load() {
-    const [{ data }, options, hallData] = await Promise.all([
+  async function load(preferredHallId = '') {
+    setError('');
+    const [{ data }, { data: options }, { data: hallData }] = await Promise.all([
       api.get('/api/invites'),
-      api.get('/api/invites/assignment-options').catch(() => ({ data: { columns: [] } })),
+      api.get('/api/invites/assignment-options'),
       api.get('/api/invites/halls'),
     ]);
     setInvites(data.invites || []);
     setJoinUrl(data.joinUrl || '');
     setJoinPath(data.joinPath || '');
-    setAssignColumns(options.data?.columns || []);
-    setHalls(hallData.data?.halls || []);
+    const columns = options.columns || [];
+    const selectedColumn = columns.find((column) => column.header === assignColumn)
+      || columns.find((column) => /hall/i.test(column.header) && column.values?.length)
+      || columns.find((column) => column.values?.length)
+      || columns[0];
+    setAssignColumns(columns);
+    setAssignColumn(selectedColumn?.header || '');
+    setAssignValues((current) => selectedColumn
+      ? current.filter((value) => selectedColumn.values.includes(value)).slice(0, 1)
+      : []);
+    const nextHalls = hallData.halls || [];
+    setHalls(nextHalls);
     setHallId((current) => (
-      hallData.data?.halls?.some((hall) => hall._id === current)
-        ? current
-        : hallData.data?.halls?.[0]?._id || ''
+      nextHalls.some((hall) => hall._id === preferredHallId)
+        ? preferredHallId
+        : nextHalls.some((hall) => hall._id === current)
+          ? current
+          : nextHalls[0]?._id || ''
     ));
   }
 
   useEffect(() => {
+    if (pathname !== '/app/assistants') return;
     load().catch((err) => setError(err.response?.data?.message || 'Could not load assistants.'));
-  }, []);
+  }, [pathname, tenant?.tenantId]);
 
   async function loadVerified(id) {
     setLoadingList(true);
@@ -155,10 +171,8 @@ export default function Assistants() {
         assignmentValues: assignValues,
       });
       setHallName('');
-      setAssignColumn('');
       setAssignValues([]);
-      setHallId(data.hall._id);
-      await load();
+      await load(data.hall._id);
     } catch (err) {
       setError(err.response?.data?.message || 'Could not create hall allocation.');
     } finally {
@@ -329,10 +343,13 @@ export default function Assistants() {
                 column={assignColumn}
                 values={assignValues}
                 onColumn={setAssignColumn}
-                onValues={(values) => setAssignValues(values.slice(-1))}
+                onValues={setAssignValues}
                 disabled={busy}
+                singleValue
+                columnLabel="Student-list column"
+                valueLabel="Hall value"
               />
-              <button className="btn-primary" disabled={busy || !assignColumns.length}>
+              <button className="btn-primary" disabled={busy || !assignColumn || assignValues.length !== 1}>
                 {busy ? 'Saving…' : 'Create hall allocation'}
               </button>
             </form>
@@ -341,8 +358,8 @@ export default function Assistants() {
           <form onSubmit={create} className="card p-5 mt-4 space-y-3">
             <h2 className="font-display text-2xl">Add assistant to a hall</h2>
             <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
-              <select className="input" value={hallId} onChange={(e) => setHallId(e.target.value)} required>
-                <option value="">Select a hall</option>
+              <select className="input" value={hallId} onChange={(e) => setHallId(e.target.value)} required disabled={!halls.length}>
+                <option value="">{halls.length ? 'Select a hall' : 'Create a hall allocation first'}</option>
                 {halls.map((hall) => (
                   <option key={hall._id} value={hall._id}>
                     {hall.name} · {hall.assistants.active} active

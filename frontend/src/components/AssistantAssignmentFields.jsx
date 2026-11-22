@@ -14,6 +14,9 @@ export default function AssistantAssignmentFields({
   onColumn,
   onValues,
   disabled,
+  singleValue = false,
+  columnLabel = 'Who they can verify',
+  valueLabel = 'List value',
 }) {
   const [custom, setCustom] = useState('');
   const headers = columns.map((row) => row.header);
@@ -35,7 +38,7 @@ export default function AssistantAssignmentFields({
 
   return (
     <div className="space-y-2">
-      <label className="label">Who they can verify</label>
+      <label className="label">{columnLabel}</label>
       <select
         className="input"
         value={column}
@@ -55,9 +58,31 @@ export default function AssistantAssignmentFields({
       {column ? (
         <>
           <p className="text-xs text-ink/60">
-            Pick the {column} values this assistant should handle — for example only 100s, or one hall. You can choose more than one.
+            {singleValue
+              ? `Select a value from the current student list for this ${column.toLowerCase()}.`
+              : `Pick the ${column} values this assistant should handle — for example only 100s, or one hall. You can choose more than one.`}
           </p>
-          {options.length ? (
+          {singleValue ? (
+            <div>
+              <label className="label">{valueLabel}</label>
+              {options.length ? (
+                <select
+                  className="input"
+                  value={(values || [])[0] || ''}
+                  disabled={disabled}
+                  required
+                  onChange={(e) => onValues(e.target.value ? [e.target.value] : [])}
+                >
+                  <option value="">Select a value</option>
+                  {options.map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
+              ) : (
+                <p className="text-xs text-ink/60">
+                  No values were found for {column} in the current student list.
+                </p>
+              )}
+            </div>
+          ) : options.length ? (
             <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
               {options.map((value) => {
                 const on = (values || []).includes(value);
@@ -77,7 +102,7 @@ export default function AssistantAssignmentFields({
           ) : (
             <p className="text-xs text-ink/60">No {column} values on the current list yet. Type them below.</p>
           )}
-          {extra.length ? (
+          {!singleValue && extra.length ? (
             <div className="flex flex-wrap gap-2">
               {extra.map((value) => (
                 <button
@@ -92,7 +117,7 @@ export default function AssistantAssignmentFields({
               ))}
             </div>
           ) : null}
-          <div className="flex gap-2">
+          {!singleValue ? <div className="flex gap-2">
             <input
               className="input"
               placeholder={`Add a ${column} value`}
@@ -109,10 +134,14 @@ export default function AssistantAssignmentFields({
             <button type="button" className="btn-ghost shrink-0" disabled={disabled || !custom.trim()} onClick={addCustom}>
               Add
             </button>
-          </div>
+          </div> : null}
         </>
       ) : (
-        <p className="text-xs text-ink/60">Leave this on the whole list, or choose a column from the Excel sheet such as Level or Hall.</p>
+        <p className="text-xs text-ink/60">
+          {singleValue
+            ? 'Choose a student-list column to load its available values for this hall.'
+            : 'Leave this on the whole list, or choose a column from the Excel sheet such as Level or Hall.'}
+        </p>
       )}
     </div>
   );
