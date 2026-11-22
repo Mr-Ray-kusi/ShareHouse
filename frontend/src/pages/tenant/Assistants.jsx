@@ -10,7 +10,7 @@ import AssistantAssignmentFields, { assignmentSummary } from '../../components/A
 
 function assignmentColumnsFromRoster(headers, beneficiaries) {
   const identityHeaders = [
-    'student index', 'index number', 'index no', 'index', 'matric', 'student id',
+    'id', 'id no', 'student index', 'index number', 'index no', 'index', 'matric', 'student id',
     'full name', 'student name', 'name', 'first name', 'last name', 'surname',
     'phone', 'phone number', 'mobile', 'email', 'contact',
   ];
@@ -52,7 +52,7 @@ export default function Assistants() {
   const [verified, setVerified] = useState({ headers: [], results: [] });
   const [loadingList, setLoadingList] = useState(false);
   const [assignmentDistributionId, setAssignmentDistributionId] = useState('');
-  const [roster, setRoster] = useState({ headers: [], beneficiaries: [] });
+  const [roster, setRoster] = useState({ distributionId: '', headers: [], beneficiaries: [] });
   const [rosterLoading, setRosterLoading] = useState(false);
   const [rosterError, setRosterError] = useState('');
   const [sortKey, setSortKey] = useState('');
@@ -76,7 +76,7 @@ export default function Assistants() {
     setInvites(data.invites || []);
     setJoinUrl(data.joinUrl || '');
     setJoinPath(data.joinPath || '');
-    const columns = options.columns || [];
+    const columns = (options.columns || []).filter((column) => column.values?.length);
     const distributions = distributionData.distributions || [];
     const currentDistribution = distributions.find((distribution) => distribution.status === 'active')
       || distributions[0];
@@ -110,7 +110,7 @@ export default function Assistants() {
   useEffect(() => {
     let active = true;
     if (!assignmentDistributionId) {
-      setRoster({ headers: [], beneficiaries: [] });
+      setRoster({ distributionId: '', headers: [], beneficiaries: [] });
       setRosterLoading(false);
       setRosterError('');
       return () => {
@@ -124,6 +124,7 @@ export default function Assistants() {
       .then(({ data }) => {
         if (active) {
           setRoster({
+            distributionId: assignmentDistributionId,
             headers: data.headers || [],
             beneficiaries: data.beneficiaries || [],
           });
@@ -142,14 +143,18 @@ export default function Assistants() {
   }, [assignmentDistributionId]);
 
   useEffect(() => {
-    if (assignColumns.length || !roster.headers.length) return;
+    if (
+      assignColumns.length
+      || roster.distributionId !== assignmentDistributionId
+      || !roster.headers.length
+    ) return;
     const columns = assignmentColumnsFromRoster(roster.headers, roster.beneficiaries);
     const selected = columns.find((column) => /hall/i.test(column.header) && column.values.length)
       || columns.find((column) => column.values.length);
     setAssignColumns(columns);
     setAssignColumn(selected?.header || '');
     setAssignValues([]);
-  }, [assignColumns.length, roster]);
+  }, [assignColumns.length, assignmentDistributionId, roster]);
 
   async function loadVerified(id) {
     setLoadingList(true);
@@ -434,34 +439,17 @@ export default function Assistants() {
                 values={assignValues}
                 onColumn={setAssignColumn}
                 onValues={setAssignValues}
-                disabled={busy}
+                disabled={busy || rosterLoading}
                 singleValue
-                columnLabel="Student-list column"
-                valueLabel="Hall value"
+                columnLabel="Allocate students by"
+                valueLabel="Allowed group"
               />
+              {rosterError && <p className="text-sm text-red-700">{rosterError}</p>}
+              {rosterLoading && <p className="text-xs text-ink/60">Loading active list columns…</p>}
               <button className="btn-primary" disabled={busy || (assignColumn && assignValues.length !== 1)}>
                 {busy ? 'Saving…' : 'Create hall allocation'}
               </button>
             </form>
-            <div className="pt-2">
-              <h3 className="font-semibold">Current student list</h3>
-              <p className="text-sm text-ink/60 mt-1">
-                Use the list headers above to assign a hall to a specific group, or choose Whole list to include everyone.
-              </p>
-              {rosterError && <p className="text-sm text-red-700 mt-2">{rosterError}</p>}
-              <div className="mt-3 max-h-[28rem] overflow-auto">
-                <SheetTable
-                  headers={roster.headers}
-                  rows={roster.beneficiaries}
-                  emptyMessage={rosterLoading
-                    ? 'Loading the current student list…'
-                    : assignmentDistributionId
-                      ? 'No students are on the current list yet.'
-                      : 'No student list is available. Upload a list to see its headers and assign halls.'}
-                />
-              </div>
-              {rosterLoading && <p className="text-xs text-ink/60 mt-2">Loading student list…</p>}
-            </div>
           </section>
 
           <form onSubmit={create} className="card p-5 mt-4 space-y-3">
